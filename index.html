@@ -347,7 +347,7 @@
                 
                   <span class="post-meta-item-text">更新于</span>
                 
-                <time title="修改时间：2019-06-30 00:49:19" itemprop="dateModified" datetime="2019-06-30T00:49:19+08:00">2019-06-30</time>
+                <time title="修改时间：2019-06-30 01:33:47" itemprop="dateModified" datetime="2019-06-30T01:33:47+08:00">2019-06-30</time>
               </span>
             
           
@@ -386,11 +386,11 @@
       
         
           
-            <h2 id="性能指标"><a href="#性能指标" class="headerlink" title="性能指标"></a>性能指标</h2><h3 id="RT-Response-Time-响应时间"><a href="#RT-Response-Time-响应时间" class="headerlink" title="RT (Response Time) - 响应时间"></a>RT (Response Time) - 响应时间</h3><p>这个时间是从用户发出请求起，接收到响应止。例如用户12:01:01秒发出请求，12：01:05秒接收到响应，则该笔交易响应时间为4秒。</p>
-<p>响应时间按照角色可以划分为3部分，其中2是我们优化重点：</p>
+            <h2 id="性能指标"><a href="#性能指标" class="headerlink" title="性能指标"></a>性能指标</h2><h3 id="RT-Response-Time-响应时间"><a href="#RT-Response-Time-响应时间" class="headerlink" title="RT (Response Time) - 响应时间"></a>RT (Response Time) - 响应时间</h3><p>这个时间是从客户端发出请求起，接收到响应止。例如12:01:01秒发出请求，12：01:05秒接收到响应，则该笔交易响应时间为4秒。</p>
+<p>响应时间按照角色可以划分为三大部分：</p>
 <ol>
-<li>通讯链路，包括用户与业务系统之间请求链路、应答链路的耗时。</li>
-<li>业务系统内部，包括读取请求报文，内部计算，数据库操作，IO、发送应答报文等。</li>
+<li>通讯链路，包括客户端与业务系统之间请求链路、应答链路的耗时。</li>
+<li>业务系统内部，包括读取请求报文、发送应答报文，计算判断，数据库操作，文件IO等。</li>
 <li>上游系统，即业务系统依赖的上游系统的处理时间。</li>
 </ol>
 <p><img src="/source-raw/_posts/flamegraph/flamegraph-RT-1.png" alt="响应时间-1"></p>
