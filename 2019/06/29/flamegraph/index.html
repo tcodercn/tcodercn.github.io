@@ -94,24 +94,24 @@
 
 
 
-  <meta name="description" content="性能指标如果我们要做性能优化，首先要明白如何衡量性能。性能主要看三大指标：响应时间、并发数和TPS 响应时间客户端发出请求到接收到响应，两者的时间差即为响应时间。例如12:01:01秒发出请求，12:01:05秒接收到响应，则该笔交易响应时间为4秒。 响应时间按照所处阶段可以划分为三大部分：  通讯链路，包括客户端与业务系统之间请求链路、应答链路的耗时。 业务系统内部，包括队列堆积，计算判断，数据">
+  <meta name="description" content="概述读完本文，你会知道：  如何衡量性能，要看哪些指标，这些指标之间的关系是怎么样的。 面对一个性能不足的系统，如何按照一个普遍适用的优化策略，着手排查问题并优化。 为什么火焰图可以快速定位问题，如何看火焰图。  性能指标如果我们要做性能优化，首先要明白如何衡量性能。 性能主要看三大指标：并发数、响应时间和TPS 并发数即系统同时并发处理的请求数量。由两个因素决定：  客户端并发请求数量，对应Lo">
 <meta name="keywords" content="性能,火焰图,performance,flamegraph">
 <meta property="og:type" content="article">
-<meta property="og:title" content="性能优化之火焰图">
+<meta property="og:title" content="性能优化-理论篇">
 <meta property="og:url" content="http://tcodercn.github.io/2019/06/29/flamegraph/index.html">
 <meta property="og:site_name" content="tcodercn blog">
-<meta property="og:description" content="性能指标如果我们要做性能优化，首先要明白如何衡量性能。性能主要看三大指标：响应时间、并发数和TPS 响应时间客户端发出请求到接收到响应，两者的时间差即为响应时间。例如12:01:01秒发出请求，12:01:05秒接收到响应，则该笔交易响应时间为4秒。 响应时间按照所处阶段可以划分为三大部分：  通讯链路，包括客户端与业务系统之间请求链路、应答链路的耗时。 业务系统内部，包括队列堆积，计算判断，数据">
+<meta property="og:description" content="概述读完本文，你会知道：  如何衡量性能，要看哪些指标，这些指标之间的关系是怎么样的。 面对一个性能不足的系统，如何按照一个普遍适用的优化策略，着手排查问题并优化。 为什么火焰图可以快速定位问题，如何看火焰图。  性能指标如果我们要做性能优化，首先要明白如何衡量性能。 性能主要看三大指标：并发数、响应时间和TPS 并发数即系统同时并发处理的请求数量。由两个因素决定：  客户端并发请求数量，对应Lo">
 <meta property="og:locale" content="zh-CN">
-<meta property="og:image" content="http://tcodercn.github.io/source-raw/_posts/flamegraph/flamegraph-rt-1.png">
 <meta property="og:image" content="http://tcodercn.github.io/source-raw/_posts/flamegraph/flamegraph-cc-1.png">
 <meta property="og:image" content="http://tcodercn.github.io/source-raw/_posts/flamegraph/flamegraph-cc-2.png">
+<meta property="og:image" content="http://tcodercn.github.io/source-raw/_posts/flamegraph/flamegraph-rt-1.png">
 <meta property="og:image" content="http://tcodercn.github.io/source-raw/_posts/flamegraph/flamegraph-tps-1.png">
 <meta property="og:image" content="http://tcodercn.github.io/source-raw/_posts/flamegraph/flamegraph-tps-2.png">
-<meta property="og:updated_time" content="2019-06-30T10:17:40.803Z">
+<meta property="og:updated_time" content="2019-07-08T16:57:13.777Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="性能优化之火焰图">
-<meta name="twitter:description" content="性能指标如果我们要做性能优化，首先要明白如何衡量性能。性能主要看三大指标：响应时间、并发数和TPS 响应时间客户端发出请求到接收到响应，两者的时间差即为响应时间。例如12:01:01秒发出请求，12:01:05秒接收到响应，则该笔交易响应时间为4秒。 响应时间按照所处阶段可以划分为三大部分：  通讯链路，包括客户端与业务系统之间请求链路、应答链路的耗时。 业务系统内部，包括队列堆积，计算判断，数据">
-<meta name="twitter:image" content="http://tcodercn.github.io/source-raw/_posts/flamegraph/flamegraph-rt-1.png">
+<meta name="twitter:title" content="性能优化-理论篇">
+<meta name="twitter:description" content="概述读完本文，你会知道：  如何衡量性能，要看哪些指标，这些指标之间的关系是怎么样的。 面对一个性能不足的系统，如何按照一个普遍适用的优化策略，着手排查问题并优化。 为什么火焰图可以快速定位问题，如何看火焰图。  性能指标如果我们要做性能优化，首先要明白如何衡量性能。 性能主要看三大指标：并发数、响应时间和TPS 并发数即系统同时并发处理的请求数量。由两个因素决定：  客户端并发请求数量，对应Lo">
+<meta name="twitter:image" content="http://tcodercn.github.io/source-raw/_posts/flamegraph/flamegraph-cc-1.png">
 
 
 
@@ -129,7 +129,7 @@
   };
 </script>
 
-  <title>性能优化之火焰图 | tcodercn blog</title>
+  <title>性能优化-理论篇 | tcodercn blog</title>
   
 
 
@@ -313,7 +313,7 @@
 
         
         
-          <h1 class="post-title" itemprop="name headline">性能优化之火焰图
+          <h1 class="post-title" itemprop="name headline">性能优化-理论篇
 
               
             
@@ -354,7 +354,7 @@
                 
                   <span class="post-meta-item-text">更新于</span>
                 
-                <time title="修改时间：2019-06-30 18:17:40" itemprop="dateModified" datetime="2019-06-30T18:17:40+08:00">2019-06-30</time>
+                <time title="修改时间：2019-07-09 00:57:13" itemprop="dateModified" datetime="2019-07-09T00:57:13+08:00">2019-07-09</time>
               </span>
             
           
@@ -391,8 +391,23 @@
       
 
       
-        <h2 id="性能指标"><a href="#性能指标" class="headerlink" title="性能指标"></a>性能指标</h2><p>如果我们要做性能优化，首先要明白如何衡量性能。性能主要看三大指标：响应时间、并发数和TPS</p>
-<h3 id="响应时间"><a href="#响应时间" class="headerlink" title="响应时间"></a>响应时间</h3><p>客户端发出请求到接收到响应，两者的时间差即为响应时间。例如12:01:01秒发出请求，12:01:05秒接收到响应，则该笔交易响应时间为4秒。</p>
+        <h1 id="概述"><a href="#概述" class="headerlink" title="概述"></a>概述</h1><p>读完本文，你会知道：</p>
+<ol>
+<li>如何衡量性能，要看哪些指标，这些指标之间的关系是怎么样的。</li>
+<li>面对一个性能不足的系统，如何按照一个普遍适用的优化策略，着手排查问题并优化。</li>
+<li>为什么火焰图可以快速定位问题，如何看火焰图。</li>
+</ol>
+<h1 id="性能指标"><a href="#性能指标" class="headerlink" title="性能指标"></a>性能指标</h1><p>如果我们要做性能优化，首先要明白如何衡量性能。</p>
+<p>性能主要看三大指标：并发数、响应时间和TPS</p>
+<h2 id="并发数"><a href="#并发数" class="headerlink" title="并发数"></a>并发数</h2><p>即系统同时并发处理的请求数量。由两个因素决定：</p>
+<ol>
+<li>客户端并发请求数量，对应LoadRunner里面的用户数；</li>
+<li>系统处理器数量，对应系统处理线程/进程池数量；</li>
+</ol>
+<p>当[1]&lt;[2]，系统处于空闲状态，此时并发数为[1]，差异部分为系统处理器空闲数量<br><img src="/source-raw/_posts/flamegraph/flamegraph-cc-1.png" alt="并发数-1"></p>
+<p>当[1]&gt;[2]，系统处于过载状态，此时并发数为[2]，差异部分为客户端请求排队数量<br><img src="/source-raw/_posts/flamegraph/flamegraph-cc-2.png" alt="并发数-1"></p>
+<p>当[1]=[2]（或稍微大于[why?]），系统处于全速状态，此时既不会产生大量的客户端请求排队，也不会出现系统处理资源空闲的情况，因此吞吐量会达到（某种条件下的）最优状态。</p>
+<h2 id="响应时间"><a href="#响应时间" class="headerlink" title="响应时间"></a>响应时间</h2><p>客户端发出请求到接收到响应，两者的时间差即为响应时间。例如12:01:01秒发出请求，12:01:05秒接收到响应，则该笔交易响应时间为4秒。</p>
 <p>响应时间按照所处阶段可以划分为三大部分：</p>
 <ol>
 <li>通讯链路，包括客户端与业务系统之间请求链路、应答链路的耗时。</li>
@@ -400,21 +415,61 @@
 <li>上游系统，即业务系统依赖的上游系统的处理时间。</li>
 </ol>
 <p><img src="/source-raw/_posts/flamegraph/flamegraph-rt-1.png" alt="响应时间-1"></p>
-<h3 id="并发数"><a href="#并发数" class="headerlink" title="并发数"></a>并发数</h3><p>即系统同时并发处理的请求数量。由两个因素决定：</p>
-<ol>
-<li>客户端请求数量，对应loadrunner里面的用户数；</li>
-<li>系统处理器数量，对应系统线程池数量；</li>
-</ol>
-<p>当[1]&lt;[2]，系统处于空闲状态，此时并发数为[1]，差异部分为系统处理器空闲数量<br><img src="/source-raw/_posts/flamegraph/flamegraph-cc-1.png" alt="并发数-1"></p>
-<p>当[1]&gt;[2]，系统处于过载状态，此时并发数为[2]，差异部分为客户端请求排队数量<br><img src="/source-raw/_posts/flamegraph/flamegraph-cc-2.png" alt="并发数-1"></p>
-<p>当[1]=[2]（或稍微大于），系统处理全速状态，此时既不会产生大量的客户端请求排队，也不会出现系统处理空闲的情况，因此吞吐量会达到最优状态。</p>
-<h3 id="TPS-每秒处理事务数"><a href="#TPS-每秒处理事务数" class="headerlink" title="TPS - 每秒处理事务数"></a>TPS - 每秒处理事务数</h3><p>如果系统平均一秒可以处理100笔交易，则TPS为100。</p>
-<p>TPS是衡量系统吞吐量最直观，也是最重要的指标。可以简单分析得出，TPS与并发数成正比，与<strong>平均响应时间</strong>成反比，即TPS=并发数/平均响应时间。例如一个系统并发数为100，平均响应时间0.1秒，则其TPS=(100/0.1)=1000，也就是一秒钟可以处理1000笔交易。</p>
-<p>并发数固定，响应时间不同产生的TPS差异对比：</p>
+<h2 id="TPS"><a href="#TPS" class="headerlink" title="TPS"></a>TPS</h2><p>每秒处理事务数，如果系统平均一秒可以处理100笔交易，则TPS为100。</p>
+<p>TPS是衡量系统吞吐量最直观，也是最重要的指标。可以简单分析得出，TPS与并发数成正比，与<strong>平均</strong>响应时间成反比，即</p>
+<blockquote>
+<p>TPS = 并发数 / 平均响应时间</p>
+</blockquote>
+<p>例如一个系统并发数为100，平均响应时间0.1秒，则其TPS=(100/0.1)=1000，也就是一秒钟可以处理1000笔交易。</p>
+<p>响应时间不同产生的TPS差异对比：</p>
 <p><img src="/source-raw/_posts/flamegraph/flamegraph-tps-1.png" alt="并发数-1"></p>
-<p>响应时间固定，并发数不同产生的TPS差异对比：</p>
+<p>并发数不同产生的TPS差异对比：</p>
 <p><img src="/source-raw/_posts/flamegraph/flamegraph-tps-2.png" alt="并发数-1"></p>
-<h2 id="分析方法"><a href="#分析方法" class="headerlink" title="分析方法"></a>分析方法</h2>
+<h1 id="优化策略"><a href="#优化策略" class="headerlink" title="优化策略"></a>优化策略</h1><p>那么，面对一个性能不足的系统，我们该如何下手？</p>
+<p>还记得前面的公式吗？</p>
+<blockquote>
+<p>TPS = 并发数 / 平均响应时间</p>
+</blockquote>
+<p>从这个公式可以推导出，为了提高系统吞吐量，可以从两方面着手：</p>
+<ol>
+<li>提高并发数</li>
+<li>降低平均响应时间</li>
+</ol>
+<h2 id="提高并发数"><a href="#提高并发数" class="headerlink" title="提高并发数"></a>提高并发数</h2><p>提高并发数一个很简单的方法就是<code>增加处理线程</code>，让客户端请求不需要排队就可以马上被并发处理。但是单台机器CPU处理能力是有上限的，并不能无限制地增加处理线程/进程。</p>
+<p>当CPU占用率达到了70%（<code>为什么不是100%？</code>），我们就不能再简单粗暴地增加处理线程/进程。此时应该想办法<code>降低CPU占用率</code>。</p>
+<p>降低CPU占用率，本质就是减少每个请求对应的CPU计算量：</p>
+<ol>
+<li>减少计算次数。例如超大<code>List</code>转换为<code>HashMap</code>，使查询时间复杂度由<code>O(n)</code>变成<code>O(1)</code></li>
+<li>缓存计算结果。例如<code>String.replaceAll(xxx, yyy)</code>改为类初始化的时候，预编译正则表达式<code>Pattern.compile(xxx)</code>，后面多个请求则直接复用这个对象，调用<code>replaceAll(yyy)</code></li>
+</ol>
+<h2 id="降低平均响应时间"><a href="#降低平均响应时间" class="headerlink" title="降低平均响应时间"></a>降低平均响应时间</h2><p>通常，降低了CPU占用率后，平均响应时间也会相应缩短。但是很多时候你会发现，CPU不高的前提下，增加客户端并发请求数和系统处理器数，TPS并没有相应的增加，甚至出现下降的场景。此时，你要考虑问题是不是出在某个CPU以外的瓶颈点：</p>
+<ol>
+<li>内存不足导致频繁PAGE IN/OUT（交换区）</li>
+<li>JAVA堆上限过小导致频繁FULL GC（STW）</li>
+<li>数据库行热点导致请求排队堵塞</li>
+<li>日志输出过多导致IO等待</li>
+<li>反复创建线程或数据库连接，没有利用池技术复用资源</li>
+<li>代码使用了全局锁导致所有线程都在锁等待</li>
+</ol>
+<p>以上各种问题，每一点都可以独立成章，一大堆各式各样的工具分析排查。那么，有没有一种通用的（<code>不管什么原因导致的瓶颈</code>），语言无关的（<code>不管java/python/c/lua</code>）工具，能帮我们快速定位问题？</p>
+<p>没错，火焰图就可以做到这些。</p>
+<h1 id="火焰图"><a href="#火焰图" class="headerlink" title="火焰图"></a>火焰图</h1><h2 id="传统分析方法"><a href="#传统分析方法" class="headerlink" title="传统分析方法"></a>传统分析方法</h2><p>想想，我们过去通常是如何分析性能问题的？</p>
+<ol>
+<li>随机打开一笔交易日志，人肉查看分析各个节点的耗时。</li>
+<li>使用jstack等工具抓取线程堆栈，人肉查看分析里面是否存在锁，或者某个栈是否出现多次。</li>
+<li>使用五花八门的工具查看分析各个怀疑的点。</li>
+</ol>
+<p>那么，以上的方法存在什么问题呢？</p>
+<ol>
+<li>侵入式分析。例如需要确保关键节点有对应的日志，如果没有还得修改代码加上日志输出，而日志输出过多又反过来影响性能。甚至JDK内部代码没法修改代码，插入输出应用日志。</li>
+<li>无法处理数据抖动。例如同样一条sql在这笔请求耗时100ms，那笔请求耗时150ms，如何衡量？人肉再抽样看多几个日志？</li>
+<li>干扰信息过多.例如日志里面一大堆变量输出，或者堆栈里面一大堆非工作线程信息。</li>
+<li>无法量化数据。看到的是一条条孤立的、不直观的数据，无法从整体来总览俯瞰各个节点的数据。无法准确判定这个方法消耗了10%的CPU，那个sql占用了20%的耗时。</li>
+<li>过于依赖开发人员的经验及其对系统架构、代码细节的熟悉程度，换个人就完全无从下手。</li>
+<li>无法排查到应用层以外的问题，例如发起方压力不够导致系统不够繁忙，或者平台设计有问题导致交易在平台层耗时过长，而到了应用层则处理很快。</li>
+</ol>
+<p>而火焰图则可以完美解决上面的这些问题。</p>
+<h2 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h2>
       
     </div>
 
@@ -581,7 +636,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#性能指标"><span class="nav-number">1.</span> <span class="nav-text">性能指标</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#响应时间"><span class="nav-number">1.1.</span> <span class="nav-text">响应时间</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#并发数"><span class="nav-number">1.2.</span> <span class="nav-text">并发数</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#TPS-每秒处理事务数"><span class="nav-number">1.3.</span> <span class="nav-text">TPS - 每秒处理事务数</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#分析方法"><span class="nav-number">2.</span> <span class="nav-text">分析方法</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#概述"><span class="nav-number">1.</span> <span class="nav-text">概述</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#性能指标"><span class="nav-number">2.</span> <span class="nav-text">性能指标</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#并发数"><span class="nav-number">2.1.</span> <span class="nav-text">并发数</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#响应时间"><span class="nav-number">2.2.</span> <span class="nav-text">响应时间</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#TPS"><span class="nav-number">2.3.</span> <span class="nav-text">TPS</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#优化策略"><span class="nav-number">3.</span> <span class="nav-text">优化策略</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#提高并发数"><span class="nav-number">3.1.</span> <span class="nav-text">提高并发数</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#降低平均响应时间"><span class="nav-number">3.2.</span> <span class="nav-text">降低平均响应时间</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#火焰图"><span class="nav-number">4.</span> <span class="nav-text">火焰图</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#传统分析方法"><span class="nav-number">4.1.</span> <span class="nav-text">传统分析方法</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#简介"><span class="nav-number">4.2.</span> <span class="nav-text">简介</span></a></li></ol></li></ol></div>
             
 
           </div>
