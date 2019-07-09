@@ -107,7 +107,9 @@
 <meta property="og:image" content="http://tcodercn.github.io/source-raw/_posts/flamegraph/flamegraph-rt-1.png">
 <meta property="og:image" content="http://tcodercn.github.io/source-raw/_posts/flamegraph/flamegraph-tps-1.png">
 <meta property="og:image" content="http://tcodercn.github.io/source-raw/_posts/flamegraph/flamegraph-tps-2.png">
-<meta property="og:updated_time" content="2019-07-08T16:57:13.777Z">
+<meta property="og:image" content="http://tcodercn.github.io/source-raw/_posts/flamegraph/flamegraph-cpu-1.png">
+<meta property="og:image" content="http://tcodercn.github.io/source-raw/_posts/flamegraph/flamegraph-time-1.png">
+<meta property="og:updated_time" content="2019-07-09T10:56:07.309Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="性能优化-理论篇">
 <meta name="twitter:description" content="概述读完本文，你会知道：  如何衡量性能，要看哪些指标，这些指标之间的关系是怎么样的。 面对一个性能不足的系统，如何按照一个普遍适用的优化策略，着手排查问题并优化。 为什么火焰图可以快速定位问题，如何看火焰图。  性能指标如果我们要做性能优化，首先要明白如何衡量性能。 性能主要看三大指标：并发数、响应时间和TPS 并发数即系统同时并发处理的请求数量。由两个因素决定：  客户端并发请求数量，对应Lo">
@@ -354,7 +356,7 @@
                 
                   <span class="post-meta-item-text">更新于</span>
                 
-                <time title="修改时间：2019-07-09 00:57:13" itemprop="dateModified" datetime="2019-07-09T00:57:13+08:00">2019-07-09</time>
+                <time title="修改时间：2019-07-09 18:56:07" itemprop="dateModified" datetime="2019-07-09T18:56:07+08:00">2019-07-09</time>
               </span>
             
           
@@ -453,7 +455,7 @@
 </ol>
 <p>以上各种问题，每一点都可以独立成章，一大堆各式各样的工具分析排查。那么，有没有一种通用的（<code>不管什么原因导致的瓶颈</code>），语言无关的（<code>不管java/python/c/lua</code>）工具，能帮我们快速定位问题？</p>
 <p>没错，火焰图就可以做到这些。</p>
-<h1 id="火焰图"><a href="#火焰图" class="headerlink" title="火焰图"></a>火焰图</h1><h2 id="传统分析方法"><a href="#传统分析方法" class="headerlink" title="传统分析方法"></a>传统分析方法</h2><p>想想，我们过去通常是如何分析性能问题的？</p>
+<h1 id="火焰图解读"><a href="#火焰图解读" class="headerlink" title="火焰图解读"></a>火焰图解读</h1><h2 id="传统分析方法"><a href="#传统分析方法" class="headerlink" title="传统分析方法"></a>传统分析方法</h2><p>想想，我们过去通常是如何分析性能问题的？</p>
 <ol>
 <li>随机打开一笔交易日志，人肉查看分析各个节点的耗时。</li>
 <li>使用jstack等工具抓取线程堆栈，人肉查看分析里面是否存在锁，或者某个栈是否出现多次。</li>
@@ -461,15 +463,79 @@
 </ol>
 <p>那么，以上的方法存在什么问题呢？</p>
 <ol>
-<li>侵入式分析。例如需要确保关键节点有对应的日志，如果没有还得修改代码加上日志输出，而日志输出过多又反过来影响性能。甚至JDK内部代码没法修改代码，插入输出应用日志。</li>
+<li>侵入式分析。需要确保关键节点有对应的日志，如果没有还得修改代码加上日志输出，而日志输出过多又反过来影响性能。如果是JDK内部代码，我们怎么改？</li>
 <li>无法处理数据抖动。例如同样一条sql在这笔请求耗时100ms，那笔请求耗时150ms，如何衡量？人肉再抽样看多几个日志？</li>
 <li>干扰信息过多.例如日志里面一大堆变量输出，或者堆栈里面一大堆非工作线程信息。</li>
 <li>无法量化数据。看到的是一条条孤立的、不直观的数据，无法从整体来总览俯瞰各个节点的数据。无法准确判定这个方法消耗了10%的CPU，那个sql占用了20%的耗时。</li>
 <li>过于依赖开发人员的经验及其对系统架构、代码细节的熟悉程度，换个人就完全无从下手。</li>
-<li>无法排查到应用层以外的问题，例如发起方压力不够导致系统不够繁忙，或者平台设计有问题导致交易在平台层耗时过长，而到了应用层则处理很快。</li>
+<li>无法排查到应用层以外的问题，例如发起方压力不够导致系统不够繁忙，或者平台设计有问题导致交易在平台层耗时过长。</li>
 </ol>
 <p>而火焰图则可以完美解决上面的这些问题。</p>
-<h2 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h2>
+<h2 id="原理"><a href="#原理" class="headerlink" title="原理"></a>原理</h2><p>火焰图一般为svg格式，使用浏览器可以直接打开。</p>
+<p>它的生成一般可以分成三个步骤：<code>采样、统计、生成</code>。部分工具可以一次性生成，但是基本原理还是一样的。</p>
+<h3 id="采样"><a href="#采样" class="headerlink" title="采样"></a>采样</h3><p>所谓<code>采样</code>，就是通过各种工具，不断地抓取正在运行的进程的堆栈信息。</p>
+<p>我们自己可以写个简单的shell脚本，采集java进程的堆栈信息：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">$PID=12345</span><br><span class="line">for i in &#123;1..100&#125;</span><br><span class="line">do</span><br><span class="line">    jstack $PID &gt;&gt; time.raw</span><br><span class="line">    sleep 0.01</span><br><span class="line">done</span><br></pre></td></tr></table></figure>
+
+<p>最终采集到的数据：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">&quot;main&quot; #1 prio=5 os_prio=0 tid=0x00007f2a0000f800 nid=0xaee waiting on condition [0x00007f2a09544000]</span><br><span class="line">   java.lang.Thread.State: WAITING (parking)</span><br><span class="line">        at sun.misc.Unsafe.park(Native Method)</span><br><span class="line">        at java.util.concurrent.locks.LockSupport.park(LockSupport.java:175)</span><br><span class="line">        at java.util.concurrent.locks.AbstractQueuedSynchronizer.parkAndCheckInterrupt(AbstractQueuedSynchronizer.java:836)</span><br><span class="line"></span><br><span class="line">&quot;main&quot; #1 prio=5 os_prio=0 tid=0x00007f2a0000f800 nid=0xaee waiting on condition [0x00007f2a09544000]</span><br><span class="line">   java.lang.Thread.State: WAITING (parking)</span><br><span class="line">        at sun.misc.Unsafe.park(Native Method)</span><br><span class="line">        at java.util.concurrent.locks.LockSupport.park(LockSupport.java:175)</span><br><span class="line">        at java.util.concurrent.locks.AbstractQueuedSynchronizer.parkAndCheckInterrupt(AbstractQueuedSynchronizer.java:836)</span><br><span class="line"></span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<h3 id="统计"><a href="#统计" class="headerlink" title="统计"></a>统计</h3><p><code>统计</code>就是读取采样数据，然后按出现次数进行归集：</p>
+<blockquote>
+<p>cat time.raw | ./stackcollapse-jstack.pl &gt; time.coll</p>
+</blockquote>
+<p>归集后数据变成这样的形式（调用栈+采样次数）：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">sun.misc.Unsafe.park;java.util.concurrent.locks.LockSupport.park;java.util.concurrent.locks.AbstractQueuedSynchronizer.parkAndCheckInterrupt 10</span><br><span class="line">xxx1;yyy1;zzz1 20</span><br><span class="line">xxx2;yyy2 30</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<h3 id="生成"><a href="#生成" class="headerlink" title="生成"></a>生成</h3><p>最后一步就是根据统计信息生成火焰图：</p>
+<blockquote>
+<p>cat time.coll | ./flamegraph.pl –colors=java &gt; time.svg</p>
+</blockquote>
+<h2 id="图形解读"><a href="#图形解读" class="headerlink" title="图形解读"></a>图形解读</h2><p>火焰图-CPU：</p>
+<p><img src="/source-raw/_posts/flamegraph/flamegraph-cpu-1.png" alt="火焰图-CPU-1"></p>
+<p>火焰图-耗时：</p>
+<p><img src="/source-raw/_posts/flamegraph/flamegraph-time-1.png" alt="火焰图-耗时-1"></p>
+<p>因为最终展现出来的图形很像一个个在抖动的火焰，因而得名<code>火焰图</code>。</p>
+<p>火焰图主要有两种，分别对应两个维度的数据：<code>CPU、耗时</code>。</p>
+<p>那么，我们该怎么看火焰图？</p>
+<ol>
+<li>x轴表示某个方法片段的比例，越宽则说明占比越高，优化后对应的效果也越好。</li>
+<li>y轴表示程序堆栈，从下往上表示完整的代码调用链，我们可以根据y轴快速准确定位代码位置。</li>
+<li>颜色只是为了区分层次，无特定含义。</li>
+<li>点击某个区块，会以该区块为基础，自动将其上层调用链展开，下层则自动置灰。当我们需要集中精力分析某个代码片段的时候会经常用到。</li>
+<li>移到某个区块，最底下会自动显示对应的<code>函数名、采样次数、整体百分比</code>。</li>
+<li>按<code>Ctrl+F</code>，在弹出的文本框输入关键字，会自动高亮包含该关键字的区块，并在右下角显示相关区块占用的<code>相对百分比</code>。</li>
+</ol>
+<p>以上面的<code>火焰图-CPU</code>为例，我们分析下里面的信息：</p>
+<ol>
+<li>最底层为all区块（100%），次底层左侧和右侧的小区块是java的native、gc、vm栈（2%），中间一大块则是jre以外的用户层（98%）。</li>
+<li>中间可以分为两部分：<code>netty</code>（7%），<code>ThreadPoolExecutor</code>（90%）。</li>
+<li>一直往上到<code>PayTrade/PAYS11/TPAYS11.execute</code>（86%）则是应用层代码，通常也是我们的优化重点。</li>
+<li>点击<code>PayTrade/PAYS11/TPAYS11.execute</code>自动展开，然后按<code>Ctrl+F</code>，在弹出的文本框输入<code>mysql</code>，相关的区块自动高亮，同时右下角显示<code>Matched: 29%</code>，即mysql相关调用的<code>相对百分比</code>为<code>29%</code>。如果此时系统平均CPU占用为<code>70%</code>，则其<code>绝对百分比</code>为<code>70% * 86% * 29% = 17%</code>，如果我们把这部分代码干掉，可以节省17%的物理CPU资源。</li>
+</ol>
+<p><code>火焰图-耗时</code>也完全可以用上面的思路分析，只是此时的维度由<code>CPU</code>变成了<code>耗时</code>。</p>
+<h1 id="下一步"><a href="#下一步" class="headerlink" title="下一步"></a>下一步</h1><p>本文简单介绍了<code>性能指标</code>、<code>优化策略</code>以及<code>火焰图解读</code>，后面会另文补充各种语言生成火焰图的方法。</p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>名称</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>通用</td>
+<td><a href="https://github.com/brendangregg/FlameGraph" target="_blank" rel="noopener">FlameGraph</a></td>
+</tr>
+<tr>
+<td>java</td>
+<td><a href="https://github.com/jvm-profiling-tools/async-profiler" target="_blank" rel="noopener">async-profiler</a> <a href="https://github.com/jvm-profiling-tools/perf-map-agent" target="_blank" rel="noopener">perf-map-agent</a></td>
+</tr>
+<tr>
+<td>python</td>
+<td><a href="https://github.com/uber/pyflame" target="_blank" rel="noopener">pyflame</a> <a href="https://github.com/benfred/py-spy" target="_blank" rel="noopener">py-spy</a></td>
+</tr>
+</tbody></table>
+
       
     </div>
 
@@ -636,7 +702,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#概述"><span class="nav-number">1.</span> <span class="nav-text">概述</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#性能指标"><span class="nav-number">2.</span> <span class="nav-text">性能指标</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#并发数"><span class="nav-number">2.1.</span> <span class="nav-text">并发数</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#响应时间"><span class="nav-number">2.2.</span> <span class="nav-text">响应时间</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#TPS"><span class="nav-number">2.3.</span> <span class="nav-text">TPS</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#优化策略"><span class="nav-number">3.</span> <span class="nav-text">优化策略</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#提高并发数"><span class="nav-number">3.1.</span> <span class="nav-text">提高并发数</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#降低平均响应时间"><span class="nav-number">3.2.</span> <span class="nav-text">降低平均响应时间</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#火焰图"><span class="nav-number">4.</span> <span class="nav-text">火焰图</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#传统分析方法"><span class="nav-number">4.1.</span> <span class="nav-text">传统分析方法</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#简介"><span class="nav-number">4.2.</span> <span class="nav-text">简介</span></a></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#概述"><span class="nav-number">1.</span> <span class="nav-text">概述</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#性能指标"><span class="nav-number">2.</span> <span class="nav-text">性能指标</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#并发数"><span class="nav-number">2.1.</span> <span class="nav-text">并发数</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#响应时间"><span class="nav-number">2.2.</span> <span class="nav-text">响应时间</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#TPS"><span class="nav-number">2.3.</span> <span class="nav-text">TPS</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#优化策略"><span class="nav-number">3.</span> <span class="nav-text">优化策略</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#提高并发数"><span class="nav-number">3.1.</span> <span class="nav-text">提高并发数</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#降低平均响应时间"><span class="nav-number">3.2.</span> <span class="nav-text">降低平均响应时间</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#火焰图解读"><span class="nav-number">4.</span> <span class="nav-text">火焰图解读</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#传统分析方法"><span class="nav-number">4.1.</span> <span class="nav-text">传统分析方法</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#原理"><span class="nav-number">4.2.</span> <span class="nav-text">原理</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#采样"><span class="nav-number">4.2.1.</span> <span class="nav-text">采样</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#统计"><span class="nav-number">4.2.2.</span> <span class="nav-text">统计</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#生成"><span class="nav-number">4.2.3.</span> <span class="nav-text">生成</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#图形解读"><span class="nav-number">4.3.</span> <span class="nav-text">图形解读</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#下一步"><span class="nav-number">5.</span> <span class="nav-text">下一步</span></a></li></ol></div>
             
 
           </div>

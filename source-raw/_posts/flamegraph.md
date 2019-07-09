@@ -6,9 +6,8 @@ tags:
   - 火焰图
   - performance
   - flamegraph
-
+toc: true
 ---
-
 
 # 概述
 读完本文，你会知道：
@@ -101,7 +100,7 @@ TPS是衡量系统吞吐量最直观，也是最重要的指标。可以简单�
 
 没错，火焰图就可以做到这些。
 
-# 火焰图
+# 火焰图解读
 
 ## 传统分析方法
 想想，我们过去通常是如何分析性能问题的？
@@ -112,14 +111,111 @@ TPS是衡量系统吞吐量最直观，也是最重要的指标。可以简单�
 
 那么，以上的方法存在什么问题呢？
 
-1. 侵入式分析。例如需要确保关键节点有对应的日志，如果没有还得修改代码加上日志输出，而日志输出过多又反过来影响性能。甚至JDK内部代码没法修改代码，插入输出应用日志。
+1. 侵入式分析。需要确保关键节点有对应的日志，如果没有还得修改代码加上日志输出，而日志输出过多又反过来影响性能。如果是JDK内部代码，我们怎么改？
 2. 无法处理数据抖动。例如同样一条sql在这笔请求耗时100ms，那笔请求耗时150ms，如何衡量？人肉再抽样看多几个日志？
 3. 干扰信息过多.例如日志里面一大堆变量输出，或者堆栈里面一大堆非工作线程信息。
 4. 无法量化数据。看到的是一条条孤立的、不直观的数据，无法从整体来总览俯瞰各个节点的数据。无法准确判定这个方法消耗了10%的CPU，那个sql占用了20%的耗时。
 5. 过于依赖开发人员的经验及其对系统架构、代码细节的熟悉程度，换个人就完全无从下手。
-6. 无法排查到应用层以外的问题，例如发起方压力不够导致系统不够繁忙，或者平台设计有问题导致交易在平台层耗时过长，而到了应用层则处理很快。
+6. 无法排查到应用层以外的问题，例如发起方压力不够导致系统不够繁忙，或者平台设计有问题导致交易在平台层耗时过长。
 
 而火焰图则可以完美解决上面的这些问题。
 
-## 简介
+## 原理
+火焰图一般为svg格式，使用浏览器可以直接打开。
+
+它的生成一般可以分成三个步骤：`采样、统计、生成`。部分工具可以一次性生成，但是基本原理还是一样的。
+
+### 采样
+所谓`采样`，就是通过各种工具，不断地抓取正在运行的进程的堆栈信息。
+
+我们自己可以写个简单的shell脚本，采集java进程的堆栈信息：
+
+```
+$PID=12345
+for i in {1..100}
+do
+    jstack $PID >> time.raw
+    sleep 0.01
+done
+```
+
+最终采集到的数据：
+
+```
+"main" #1 prio=5 os_prio=0 tid=0x00007f2a0000f800 nid=0xaee waiting on condition [0x00007f2a09544000]
+   java.lang.Thread.State: WAITING (parking)
+        at sun.misc.Unsafe.park(Native Method)
+        at java.util.concurrent.locks.LockSupport.park(LockSupport.java:175)
+        at java.util.concurrent.locks.AbstractQueuedSynchronizer.parkAndCheckInterrupt(AbstractQueuedSynchronizer.java:836)
+
+"main" #1 prio=5 os_prio=0 tid=0x00007f2a0000f800 nid=0xaee waiting on condition [0x00007f2a09544000]
+   java.lang.Thread.State: WAITING (parking)
+        at sun.misc.Unsafe.park(Native Method)
+        at java.util.concurrent.locks.LockSupport.park(LockSupport.java:175)
+        at java.util.concurrent.locks.AbstractQueuedSynchronizer.parkAndCheckInterrupt(AbstractQueuedSynchronizer.java:836)
+
+...
+```
+
+### 统计
+`统计`就是读取采样数据，然后按出现次数进行归集：
+
+> cat time.raw | ./stackcollapse-jstack.pl > time.coll
+
+归集后数据变成这样的形式（调用栈+采样次数）：
+
+
+```
+sun.misc.Unsafe.park;java.util.concurrent.locks.LockSupport.park;java.util.concurrent.locks.AbstractQueuedSynchronizer.parkAndCheckInterrupt 10
+xxx1;yyy1;zzz1 20
+xxx2;yyy2 30
+...
+```
+
+### 生成
+最后一步就是根据统计信息生成火焰图：
+
+> cat time.coll | ./flamegraph.pl --colors=java > time.svg
+
+## 图形解读
+
+火焰图-CPU：
+
+![火焰图-CPU-1](flamegraph/flamegraph-cpu-1.png)
+
+火焰图-耗时：
+
+![火焰图-耗时-1](flamegraph/flamegraph-time-1.png)
+
+因为最终展现出来的图形很像一个个在抖动的火焰，因而得名`火焰图`。
+
+火焰图主要有两种，分别对应两个维度的数据：`CPU、耗时`。
+
+那么，我们该怎么看火焰图？
+
+1. x轴表示某个方法片段的比例，越宽则说明占比越高，优化后对应的效果也越好。
+2. y轴表示程序堆栈，从下往上表示完整的代码调用链，我们可以根据y轴快速准确定位代码位置。
+3. 颜色只是为了区分层次，无特定含义。
+4. 点击某个区块，会以该区块为基础，自动将其上层调用链展开，下层则自动置灰。当我们需要集中精力分析某个代码片段的时候会经常用到。
+5. 移到某个区块，最底下会自动显示对应的`函数名、采样次数、整体百分比`。
+6. 按`Ctrl+F`，在弹出的文本框输入关键字，会自动高亮包含该关键字的区块，并在右下角显示相关区块占用的`相对百分比`。
+
+以上面的`火焰图-CPU`为例，我们分析下里面的信息：
+
+1. 最底层为all区块（100%），次底层左侧和右侧的小区块是java的native、gc、vm栈（2%），中间一大块则是jre以外的用户层（98%）。
+2. 中间可以分为两部分：`netty`（7%），`ThreadPoolExecutor`（90%）。
+3. 一直往上到`PayTrade/PAYS11/TPAYS11.execute`（86%）则是应用层代码，通常也是我们的优化重点。
+4. 点击`PayTrade/PAYS11/TPAYS11.execute`自动展开，然后按`Ctrl+F`，在弹出的文本框输入`mysql`，相关的区块自动高亮，同时右下角显示`Matched: 29%`，即mysql相关调用的`相对百分比`为`29%`。如果此时系统平均CPU占用为`70%`，则其`绝对百分比`为`70% * 86% * 29% = 17%`，如果我们把这部分代码干掉，可以节省17%的物理CPU资源。
+
+`火焰图-耗时`也完全可以用上面的思路分析，只是此时的维度由`CPU`变成了`耗时`。
+
+
+# 下一步
+本文简单介绍了`性能指标`、`优化策略`以及`火焰图解读`，后面会另文补充各种语言生成火焰图的方法。
+
+| 类型 | 名称 |
+| - | --- |
+| 通用 | [FlameGraph](https://github.com/brendangregg/FlameGraph)|
+| java | [async-profiler](https://github.com/jvm-profiling-tools/async-profiler) [perf-map-agent](https://github.com/jvm-profiling-tools/perf-map-agent)|
+| python | [pyflame](https://github.com/uber/pyflame) [py-spy](https://github.com/benfred/py-spy)|
 
