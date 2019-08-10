@@ -14,7 +14,7 @@
   
 
 
-<html class="theme-next muse use-motion" lang="zh-CN">
+<html class="theme-next gemini use-motion" lang="zh-CN">
 <head><meta name="generator" content="Hexo 3.9.0">
   <meta charset="UTF-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -68,7 +68,7 @@
   var NexT = window.NexT || {};
   var CONFIG = {
     root: '/',
-    scheme: 'Muse',
+    scheme: 'Gemini',
     version: '7.1.2',
     sidebar: {"position":"left","display":"hide","offset":12,"onmobile":false,"dimmer":false},
     back2top: true,
@@ -94,23 +94,26 @@
 
 
 
-  <meta name="description" content="前言读完本文，你会知道：  缓存的基本概念 如何使用spring的缓存 如何改进spring的缓存  概述传统模式下，很多并发不大的系统都是直接将查询请求发到DB：  随着业务发展，业务逻辑会变得越来越复杂，系统并发数也会逐渐上涨，导致传递到DB的查询请求以几何级数上涨，DB慢慢变得不堪重负。 为了应对这个问题，我们需要将常用的数据缓存起来，避免业务量*N的查询请求穿透到DB。 方案1-外部定时刷">
+  <meta name="description" content="前言 概述 demo准备工作 无缓存 原始缓存 spring缓存 原理浅析 逐步扩展 发散思考    前言 读完本文，你会知道：  缓存的基本概念 如何使用spring的缓存 如何扩展spring的缓存   概述 传统模式下，很多并发不大的系统都是直接将查询请求发到DB：  随着业务发展，业务逻辑会变得越来越复杂，系统并发数也会逐渐上涨，导致传递到DB的查询请求以几何级数上涨，DB慢慢变得不堪重">
 <meta name="keywords" content="spring,cache,缓存">
 <meta property="og:type" content="article">
 <meta property="og:title" content="spring cache">
 <meta property="og:url" content="http://tcodercn.github.io/2019/08/06/springcache/index.html">
 <meta property="og:site_name" content="tcodercn blog">
-<meta property="og:description" content="前言读完本文，你会知道：  缓存的基本概念 如何使用spring的缓存 如何改进spring的缓存  概述传统模式下，很多并发不大的系统都是直接将查询请求发到DB：  随着业务发展，业务逻辑会变得越来越复杂，系统并发数也会逐渐上涨，导致传递到DB的查询请求以几何级数上涨，DB慢慢变得不堪重负。 为了应对这个问题，我们需要将常用的数据缓存起来，避免业务量*N的查询请求穿透到DB。 方案1-外部定时刷">
+<meta property="og:description" content="前言 概述 demo准备工作 无缓存 原始缓存 spring缓存 原理浅析 逐步扩展 发散思考    前言 读完本文，你会知道：  缓存的基本概念 如何使用spring的缓存 如何扩展spring的缓存   概述 传统模式下，很多并发不大的系统都是直接将查询请求发到DB：  随着业务发展，业务逻辑会变得越来越复杂，系统并发数也会逐渐上涨，导致传递到DB的查询请求以几何级数上涨，DB慢慢变得不堪重">
 <meta property="og:locale" content="zh-CN">
 <meta property="og:image" content="http://tcodercn.github.io/source-raw/_posts/springcache/springcache-direct-1.png">
 <meta property="og:image" content="http://tcodercn.github.io/source-raw/_posts/springcache/springcache-side-refresh-1.png">
 <meta property="og:image" content="http://tcodercn.github.io/source-raw/_posts/springcache/springcache-access-refresh-1.png">
 <meta property="og:image" content="http://tcodercn.github.io/source-raw/_posts/springcache/springcache-aop-1.png">
 <meta property="og:image" content="http://tcodercn.github.io/source-raw/_posts/springcache/springcache-aop-2.png">
-<meta property="og:updated_time" content="2019-08-08T14:29:22.979Z">
+<meta property="og:image" content="http://tcodercn.github.io/source-raw/_posts/springcache/springcache-expire-1.png">
+<meta property="og:image" content="http://tcodercn.github.io/source-raw/_posts/springcache/springcache-expire-2.png">
+<meta property="og:image" content="http://tcodercn.github.io/source-raw/_posts/springcache/springcache-expire-3.png">
+<meta property="og:updated_time" content="2019-08-10T17:41:48.438Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="spring cache">
-<meta name="twitter:description" content="前言读完本文，你会知道：  缓存的基本概念 如何使用spring的缓存 如何改进spring的缓存  概述传统模式下，很多并发不大的系统都是直接将查询请求发到DB：  随着业务发展，业务逻辑会变得越来越复杂，系统并发数也会逐渐上涨，导致传递到DB的查询请求以几何级数上涨，DB慢慢变得不堪重负。 为了应对这个问题，我们需要将常用的数据缓存起来，避免业务量*N的查询请求穿透到DB。 方案1-外部定时刷">
+<meta name="twitter:description" content="前言 概述 demo准备工作 无缓存 原始缓存 spring缓存 原理浅析 逐步扩展 发散思考    前言 读完本文，你会知道：  缓存的基本概念 如何使用spring的缓存 如何扩展spring的缓存   概述 传统模式下，很多并发不大的系统都是直接将查询请求发到DB：  随着业务发展，业务逻辑会变得越来越复杂，系统并发数也会逐渐上涨，导致传递到DB的查询请求以几何级数上涨，DB慢慢变得不堪重">
 <meta name="twitter:image" content="http://tcodercn.github.io/source-raw/_posts/springcache/springcache-direct-1.png">
 
 
@@ -254,9 +257,6 @@
   
 
   
-    
-
-  
 
   
 </nav>
@@ -276,6 +276,9 @@
     <main id="main" class="main">
       <div class="main-inner">
         <div class="content-wrap">
+          
+            
+
           
           <div id="content" class="content">
             
@@ -354,7 +357,7 @@
                 
                   <span class="post-meta-item-text">更新于</span>
                 
-                <time title="修改时间：2019-08-08 22:29:22" itemprop="dateModified" datetime="2019-08-08T22:29:22+08:00">2019-08-08</time>
+                <time title="修改时间：2019-08-11 01:41:48" itemprop="dateModified" datetime="2019-08-11T01:41:48+08:00">2019-08-11</time>
               </span>
             
           
@@ -391,17 +394,32 @@
       
 
       
-        <h1 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h1><p>读完本文，你会知道：</p>
+        <p><ul class="markdownIt-TOC">
+<li><a href="#%E5%89%8D%E8%A8%80">前言</a></li>
+<li><a href="#%E6%A6%82%E8%BF%B0">概述</a></li>
+<li><a href="#demo%E5%87%86%E5%A4%87%E5%B7%A5%E4%BD%9C">demo准备工作</a></li>
+<li><a href="#%E6%97%A0%E7%BC%93%E5%AD%98">无缓存</a></li>
+<li><a href="#%E5%8E%9F%E5%A7%8B%E7%BC%93%E5%AD%98">原始缓存</a></li>
+<li><a href="#spring%E7%BC%93%E5%AD%98">spring缓存</a></li>
+<li><a href="#%E5%8E%9F%E7%90%86%E6%B5%85%E6%9E%90">原理浅析</a></li>
+<li><a href="#%E9%80%90%E6%AD%A5%E6%89%A9%E5%B1%95">逐步扩展</a></li>
+<li><a href="#%E5%8F%91%E6%95%A3%E6%80%9D%E8%80%83">发散思考</a></li>
+</ul>
+</p>
+<h1 id="前言"><a class="markdownIt-Anchor" href="#前言"></a> 前言</h1>
+<p>读完本文，你会知道：</p>
 <ol>
 <li>缓存的基本概念</li>
 <li>如何使用spring的缓存</li>
-<li>如何改进spring的缓存</li>
+<li>如何扩展spring的缓存</li>
 </ol>
-<h1 id="概述"><a href="#概述" class="headerlink" title="概述"></a>概述</h1><p>传统模式下，很多并发不大的系统都是直接将查询请求发到DB：</p>
+<h1 id="概述"><a class="markdownIt-Anchor" href="#概述"></a> 概述</h1>
+<p>传统模式下，很多并发不大的系统都是直接将查询请求发到DB：</p>
 <p><img src="/source-raw/_posts/springcache/springcache-direct-1.png" alt="直接访问-1"></p>
 <p>随着业务发展，业务逻辑会变得越来越复杂，系统并发数也会逐渐上涨，导致传递到DB的查询请求以几何级数上涨，DB慢慢变得不堪重负。</p>
 <p>为了应对这个问题，我们需要将常用的数据缓存起来，避免<code>业务量*N</code>的查询请求穿透到DB。</p>
-<h2 id="方案1-外部定时刷新"><a href="#方案1-外部定时刷新" class="headerlink" title="方案1-外部定时刷新"></a>方案1-外部定时刷新</h2><p><img src="/source-raw/_posts/springcache/springcache-side-refresh-1.png" alt="外部定时刷新-1"></p>
+<h2 id="方案1-外部定时刷新"><a class="markdownIt-Anchor" href="#方案1-外部定时刷新"></a> 方案1-外部定时刷新</h2>
+<p><img src="/source-raw/_posts/springcache/springcache-side-refresh-1.png" alt="外部定时刷新-1"></p>
 <ol>
 <li>缓存刷新程序读取DB，然后写入缓存；</li>
 <li>联机交易直接读取缓存，不再访问数据库；</li>
@@ -413,7 +431,8 @@
 <li>刷新频率无法精细控制。比如一些数据一天刷新一次即可，一些数据需要10秒刷新一次。</li>
 <li>无法区分冷热数据，空间利用率差。比如一张表10000条数据，常被访问的也就100条，另外9900条数据可能一年都不会用到一次，还是一样被加载到缓存里面。</li>
 </ol>
-<h2 id="方案2-访问自动刷新"><a href="#方案2-访问自动刷新" class="headerlink" title="方案2-访问自动刷新"></a>方案2-访问自动刷新</h2><p><img src="/source-raw/_posts/springcache/springcache-access-refresh-1.png" alt="访问自动刷新-1"></p>
+<h2 id="方案2-访问自动刷新"><a class="markdownIt-Anchor" href="#方案2-访问自动刷新"></a> 方案2-访问自动刷新</h2>
+<p><img src="/source-raw/_posts/springcache/springcache-access-refresh-1.png" alt="访问自动刷新-1"></p>
 <ol>
 <li>联机交易访问缓存，如果有值且未过期，直接返回调用者；</li>
 <li>访问数据库获取最新值；</li>
@@ -421,54 +440,73 @@
 </ol>
 <p>这个方案解决了<code>方案1</code>的各种问题，但是还是有许多细节需要处理的。</p>
 <p>接下来我们做个demo，看看如何实现一个基本可用的缓存方案，并逐一解决各种问题。</p>
-<h1 id="demo准备工作"><a href="#demo准备工作" class="headerlink" title="demo准备工作"></a>demo准备工作</h1><h2 id="UserService-用户服务接口"><a href="#UserService-用户服务接口" class="headerlink" title="UserService-用户服务接口"></a>UserService-用户服务接口</h2><p>接口只有一个方法<code>getNameFromId</code>，入参为用户id，返回值为用户名：</p>
+<h1 id="demo准备工作"><a class="markdownIt-Anchor" href="#demo准备工作"></a> demo准备工作</h1>
+<h2 id="userservice-用户服务接口"><a class="markdownIt-Anchor" href="#userservice-用户服务接口"></a> UserService-用户服务接口</h2>
+<p>接口只有一个方法<code>getNameFromId</code>，入参为用户id，返回值为用户名：</p>
 <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">interface</span> <span class="title">UserService</span> </span>&#123;</span><br><span class="line">    <span class="function"><span class="keyword">public</span> String <span class="title">getNameFromId</span><span class="params">(String userId)</span></span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<h2 id="AbstractUserService-用户服务抽象类"><a href="#AbstractUserService-用户服务抽象类" class="headerlink" title="AbstractUserService-用户服务抽象类"></a>AbstractUserService-用户服务抽象类</h2><p>提供一个方法模拟实现从DB查询，让子类可以直接调用：</p>
+<h2 id="abstractuserservice-用户服务抽象类"><a class="markdownIt-Anchor" href="#abstractuserservice-用户服务抽象类"></a> AbstractUserService-用户服务抽象类</h2>
+<p>提供一个方法模拟实现从DB查询，让子类可以直接调用：</p>
 <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">abstract</span> <span class="class"><span class="keyword">class</span> <span class="title">AbstractUserService</span> <span class="keyword">implements</span> <span class="title">UserService</span> </span>&#123;</span><br><span class="line">    <span class="keyword">private</span> Logger log = LoggerFactory.getLogger(getClass());</span><br><span class="line">    </span><br><span class="line">    <span class="function"><span class="keyword">protected</span> String <span class="title">getNameFromDb</span><span class="params">(String userId)</span> </span>&#123;</span><br><span class="line">        log.info(<span class="string">"db query: &#123;&#125;"</span>, userId);</span><br><span class="line">        <span class="keyword">return</span> <span class="string">"Name_"</span> + id;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<h2 id="testDirect-测试方法"><a href="#testDirect-测试方法" class="headerlink" title="testDirect - 测试方法"></a>testDirect - 测试方法</h2><p>通过传入不同的实现来测试对应的缓存效果：</p>
+<h2 id="testdirect-测试方法"><a class="markdownIt-Anchor" href="#testdirect-测试方法"></a> testDirect - 测试方法</h2>
+<p>通过传入不同的实现来测试对应的缓存效果：</p>
 <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">testDirect</span><span class="params">(UserService userSvc, String userId)</span> </span>&#123;</span><br><span class="line">    String name;</span><br><span class="line">    <span class="comment">// 1</span></span><br><span class="line">    name = userSvc.getNameFromId(userId);</span><br><span class="line">    log.info(<span class="string">"result: &#123;&#125; -&gt; &#123;&#125;"</span>, userId, name);</span><br><span class="line">    <span class="comment">// 2</span></span><br><span class="line">    name = userSvc.getNameFromId(userId);</span><br><span class="line">    log.info(<span class="string">"result: &#123;&#125; -&gt; &#123;&#125;"</span>, userId, name);</span><br><span class="line">    <span class="comment">// 3</span></span><br><span class="line">    name = userSvc.getNameFromId(userId);</span><br><span class="line">    log.info(<span class="string">"result: &#123;&#125; -&gt; &#123;&#125;"</span>, userId, name);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<h1 id="无缓存"><a href="#无缓存" class="headerlink" title="无缓存"></a>无缓存</h1><p>无缓存版本直接调用父类方法访问DB：</p>
+<h1 id="无缓存"><a class="markdownIt-Anchor" href="#无缓存"></a> 无缓存</h1>
+<p>无缓存版本直接调用父类方法访问DB：</p>
 <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Component</span></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">NoCacheUserService</span> <span class="keyword">extends</span> <span class="title">AbstractUserService</span> </span>&#123;</span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> String <span class="title">getNameFromId</span><span class="params">(String userId)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> getNameFromDb(userId);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
 <p>执行结果可以观察到每次调用都是访问DB：</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">db query: I0001            </span><br><span class="line">result: I0001 -&gt; Name_I0001</span><br><span class="line">db query: I0001            </span><br><span class="line">result: I0001 -&gt; Name_I0001</span><br><span class="line">db query: I0001            </span><br><span class="line">result: I0001 -&gt; Name_I0001</span><br></pre></td></tr></table></figure>
-
-<h1 id="原始缓存"><a href="#原始缓存" class="headerlink" title="原始缓存"></a>原始缓存</h1><p>程序员的第一想法肯定是不用搞那么多杂七杂八的，我自己动手用Map实现一个缓存：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">SimpleCacheManager</span>&lt;<span class="title">K</span>, <span class="title">V</span>&gt; </span>&#123;</span><br><span class="line">    <span class="keyword">private</span> Map&lt;K, V&gt; cache = <span class="keyword">new</span> ConcurrentHashMap&lt;&gt;();</span><br><span class="line">    </span><br><span class="line">    <span class="function"><span class="keyword">public</span> V <span class="title">get</span><span class="params">(K key)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> cache.get(key);</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">put</span><span class="params">(K key, V value)</span> </span>&#123;</span><br><span class="line">        cache.put(key, value);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p>修改下业务代码：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Component</span></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">SimpleCacheUserService</span> <span class="keyword">extends</span> <span class="title">AbstractUserService</span> </span>&#123;</span><br><span class="line">    <span class="keyword">private</span> SimpleCacheManager&lt;String, String&gt; cacheMgr = <span class="keyword">new</span> SimpleCacheManager&lt;&gt;();</span><br><span class="line">    </span><br><span class="line">    <span class="function"><span class="keyword">public</span> String <span class="title">getNameFromId</span><span class="params">(String userId)</span> </span>&#123;</span><br><span class="line">        String name = cacheMgr.get(userId);</span><br><span class="line">        <span class="keyword">if</span> (name == <span class="keyword">null</span>) &#123;</span><br><span class="line">            name = getNameFromDb(userId);</span><br><span class="line">            cacheMgr.put(id, name);</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> name;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
+<h1 id="原始缓存"><a class="markdownIt-Anchor" href="#原始缓存"></a> 原始缓存</h1>
+<p>程序员的第一想法肯定是不用搞那么多杂七杂八的，自己动手用Map实现一个缓存：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Component</span></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">SimpleCacheUserService</span> <span class="keyword">extends</span> <span class="title">AbstractUserService</span> </span>&#123;</span><br><span class="line">    <span class="keyword">private</span> Map&lt;String, String&gt; cacheMap = <span class="keyword">new</span> ConcurrentHashMap&lt;&gt;();</span><br><span class="line">    </span><br><span class="line">    <span class="function"><span class="keyword">public</span> String <span class="title">getNameFromId</span><span class="params">(String userId)</span> </span>&#123;</span><br><span class="line">        String name = cacheMap.get(userId);</span><br><span class="line">        <span class="keyword">if</span> (name == <span class="keyword">null</span>) &#123;</span><br><span class="line">            name = getNameFromDb(userId);</span><br><span class="line">            cacheMap.put(userId, name);</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> name;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p>执行结果可以观察到只有第一次调用访问DB，后面都是直接从缓存获取</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">db query: I0001            </span><br><span class="line">result: I0001 -&gt; Name_I0001</span><br><span class="line">result: I0001 -&gt; Name_I0001</span><br><span class="line">result: I0001 -&gt; Name_I0001</span><br></pre></td></tr></table></figure>
-
 <p>那么，这个方案存在什么不足呢？</p>
 <ol>
 <li>侵入性高。业务代码与缓存逻辑耦合在一起，不利于后续维护。</li>
 <li>不能灵活扩展，比如某类热点用户id才缓存，其他不缓存。</li>
 <li>绑死ConcurrentHashMap，无法随意切换其他更优秀的缓存实现，比如ehcache/redis等。</li>
-<li>缺乏自动刷新、过期淘汰等各种特征。</li>
+<li>缺乏自动刷新、过期淘汰等现代缓存特征。</li>
 </ol>
 <p>那么，spring是怎么做的呢？</p>
-<h1 id="spring缓存"><a href="#spring缓存" class="headerlink" title="spring缓存"></a>spring缓存</h1><p>相比之前侵入式的方案，spring采用的是声明式缓存，缓存逻辑完全脱离业务代码。开发要做的只是在方法上面增加一个注解<code>@Cacheable</code></p>
+<h1 id="spring缓存"><a class="markdownIt-Anchor" href="#spring缓存"></a> spring缓存</h1>
+<p>相比之前侵入式的方案，spring采用的是声明式缓存，缓存逻辑完全脱离业务代码。我们要做的只是在方法上面增加一个注解<code>@Cacheable</code></p>
 <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Component</span></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">SpringCacheUserService</span> <span class="keyword">extends</span> <span class="title">AbstractUserService</span> </span>&#123;</span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="meta">@Cacheable</span>(<span class="string">"SpringCache"</span>)</span><br><span class="line">    <span class="function"><span class="keyword">public</span> String <span class="title">getNameFromId</span><span class="params">(String userId)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> getNameFromDb(userId);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
 <p>运行后好像没效果，那是因为我们还没开启缓存。在程序入口添加一个注解<code>@EnableCaching</code>：</p>
 <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@SpringBootApplication</span></span><br><span class="line"><span class="meta">@EnableCaching</span></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">TestCacheApp</span> </span>&#123;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
 <p>再次运行就可以观察到缓存生效了</p>
-<p>如果要实现K开头的用户id才缓存，怎么实现呢？很简单，修改下注解，使用<code>SPEL</code>声明条件即可：</p>
+<p>如果要实现K开头的用户id才缓存，怎么做呢？很简单，修改下注解，使用<code>SPEL</code>声明条件即可：</p>
 <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Cacheable</span>(cacheNames=<span class="string">"SpringCache"</span>, condition=<span class="string">"#userId.startsWith('K')"</span>)</span><br></pre></td></tr></table></figure>
-
-<h1 id="原理浅析"><a href="#原理浅析" class="headerlink" title="原理浅析"></a>原理浅析</h1><p>原始调用链：</p>
+<h1 id="原理浅析"><a class="markdownIt-Anchor" href="#原理浅析"></a> 原理浅析</h1>
+<p>原始调用链：</p>
 <p><img src="/source-raw/_posts/springcache/springcache-aop-1.png" alt="原始调用链-1"></p>
 <p>spring通过AOP，在调用者和目标类中间插入代理类，拦截方法调用，实现缓存逻辑：</p>
 <p><img src="/source-raw/_posts/springcache/springcache-aop-2.png" alt="AOP-1"></p>
-<p>在此模式下，应用层都是统一一个注解接口，而后端的缓存实现就可以灵活扩展，还能自由<code>切换、组合</code>各种优秀的缓存方案（比如ehcache/guava/caffeine/redis）。</p>
-<h1 id="逐步改进"><a href="#逐步改进" class="headerlink" title="逐步改进"></a>逐步改进</h1><h1 id="发散思考"><a href="#发散思考" class="headerlink" title="发散思考"></a>发散思考</h1>
+<p>这个设计下，应用层统一使用<code>@Cacheable</code>，而后端的缓存实现就可以灵活扩展，还能<code>自由切换、组合</code>各种优秀的缓存方案，比如ehcache/guava/caffeine/redis。</p>
+<h1 id="逐步扩展"><a class="markdownIt-Anchor" href="#逐步扩展"></a> 逐步扩展</h1>
+<h2 id="支持过期时间"><a class="markdownIt-Anchor" href="#支持过期时间"></a> 支持过期时间</h2>
+<p>spring默认使用<code>ConcurrentHashMap</code>实现缓存，因此是不支持过期时间的，我们将其换成<code>Caffeine</code>。</p>
+<p>添加依赖：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">implementation &apos;org.springframework.boot:spring-boot-starter&apos;</span><br><span class="line">implementation &apos;org.springframework.boot:spring-boot-starter-cache&apos;</span><br></pre></td></tr></table></figure>
+<p>添加配置，设置缓存1秒过期：</p>
+<figure class="highlight yml"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="string">spring.cache.caffeine.spec:</span> <span class="string">expireAfterWrite=1s</span></span><br></pre></td></tr></table></figure>
+<p>添加测试方法，中间插入一个sleep休眠1.2秒：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">testExpire</span><span class="params">(UserService userSvc, String userId)</span> </span>&#123;</span><br><span class="line">    String name;</span><br><span class="line">    <span class="comment">// 1</span></span><br><span class="line">    name = userSvc.getNameFromId(userId);</span><br><span class="line">    log.info(<span class="string">"result: &#123;&#125; -&gt; &#123;&#125;"</span>, userId, name);</span><br><span class="line">    <span class="comment">// 2</span></span><br><span class="line">    name = userSvc.getNameFromId(userId);</span><br><span class="line">    log.info(<span class="string">"result: &#123;&#125; -&gt; &#123;&#125;"</span>, userId, name);</span><br><span class="line">    <span class="comment">// sleep</span></span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        Thread.sleep(<span class="number">1200</span>);</span><br><span class="line">    &#125; <span class="keyword">catch</span> (InterruptedException e) &#123;</span><br><span class="line">        <span class="keyword">throw</span> <span class="keyword">new</span> RuntimeException(e);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">// 3</span></span><br><span class="line">    name = userSvc.getNameFromId(userId);</span><br><span class="line">    log.info(<span class="string">"result: &#123;&#125; -&gt; &#123;&#125;"</span>, userId, name);</span><br><span class="line">    <span class="comment">// 4</span></span><br><span class="line">    name = userSvc.getNameFromId(userId);</span><br><span class="line">    log.info(<span class="string">"result: &#123;&#125; -&gt; &#123;&#125;"</span>, userId, name);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>运行可以观察到sleep之后，缓存过期失效，重新查询DB：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">db query: I0001            </span><br><span class="line">result: I0001 -&gt; Name_I0001</span><br><span class="line">result: I0001 -&gt; Name_I0001</span><br><span class="line">db query: I0001            </span><br><span class="line">result: I0001 -&gt; Name_I0001</span><br><span class="line">result: I0001 -&gt; Name_I0001</span><br></pre></td></tr></table></figure>
+<p>这个方案下缓存过期时间是全局性的，没法针对特定类型的缓存单独配置，如何改进呢？</p>
+<h2 id="精细控制过期时间"><a class="markdownIt-Anchor" href="#精细控制过期时间"></a> 精细控制过期时间</h2>
+<p>我们可以从<code>@Cacheable(cacheNames=&quot;SpringCache&quot;)</code>着手，在缓存名称后面追加过期时间，变成<code>@Cacheable(cacheNames=&quot;SpringCache,1&quot;)</code></p>
+<p>新增一个<code>CacheManager</code>，重写父类方法<code>createCaffeineCache</code>，在里面处理缓存名称：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Component</span></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">ExtCacheManager</span> <span class="keyword">extends</span> <span class="title">CaffeineCacheManager</span> </span>&#123;</span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="function"><span class="keyword">protected</span> Cache <span class="title">createCaffeineCache</span><span class="params">(String name)</span> </span>&#123;</span><br><span class="line">        <span class="comment">// 解析缓存名称</span></span><br><span class="line">        String[] items = name.split(<span class="string">","</span>);</span><br><span class="line">        String cacheName = items[<span class="number">0</span>];</span><br><span class="line">        <span class="keyword">long</span> cacheTime = Long.parseLong(items[<span class="number">1</span>]);</span><br><span class="line">        <span class="comment">// 创建缓存</span></span><br><span class="line">        com.github.benmanes.caffeine.cache.Cache&lt;Object, Object&gt; nativeCache = </span><br><span class="line">                Caffeine.newBuilder()</span><br><span class="line">                .expireAfterWrite(cacheTime, TimeUnit.SECONDS)</span><br><span class="line">                .build();</span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">new</span> CaffeineCache(cacheName, nativeCache);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="过期处理"><a class="markdownIt-Anchor" href="#过期处理"></a> 过期处理</h2>
+<p>当缓存过期后，如果不加以处理，就会导致多个并发请求瞬间穿透到DB：</p>
+<p><img src="/source-raw/_posts/springcache/springcache-expire-1.png" alt="缓存过期-穿透-1"></p>
+<p>一个解决方案是判断到过期的时候加锁，抢占成功的就去DB刷新缓存，其他请求则使用旧值：</p>
+<p><img src="/source-raw/_posts/springcache/springcache-expire-2.png" alt="缓存过期-穿透-2"></p>
+<p>但是要考虑如果一直没请求进来，在缓存过期很久之后再出现这个场景，此时取到的旧值已经过期很久了：</p>
+<p><img src="/source-raw/_posts/springcache/springcache-expire-3.png" alt="缓存过期-穿透-2"></p>
+<h1 id="发散思考"><a class="markdownIt-Anchor" href="#发散思考"></a> 发散思考</h1>
+
       
     </div>
 
@@ -655,7 +693,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#前言"><span class="nav-number">1.</span> <span class="nav-text">前言</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#概述"><span class="nav-number">2.</span> <span class="nav-text">概述</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#方案1-外部定时刷新"><span class="nav-number">2.1.</span> <span class="nav-text">方案1-外部定时刷新</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#方案2-访问自动刷新"><span class="nav-number">2.2.</span> <span class="nav-text">方案2-访问自动刷新</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#demo准备工作"><span class="nav-number">3.</span> <span class="nav-text">demo准备工作</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#UserService-用户服务接口"><span class="nav-number">3.1.</span> <span class="nav-text">UserService-用户服务接口</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#AbstractUserService-用户服务抽象类"><span class="nav-number">3.2.</span> <span class="nav-text">AbstractUserService-用户服务抽象类</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#testDirect-测试方法"><span class="nav-number">3.3.</span> <span class="nav-text">testDirect - 测试方法</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#无缓存"><span class="nav-number">4.</span> <span class="nav-text">无缓存</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#原始缓存"><span class="nav-number">5.</span> <span class="nav-text">原始缓存</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#spring缓存"><span class="nav-number">6.</span> <span class="nav-text">spring缓存</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#原理浅析"><span class="nav-number">7.</span> <span class="nav-text">原理浅析</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#逐步改进"><span class="nav-number">8.</span> <span class="nav-text">逐步改进</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#发散思考"><span class="nav-number">9.</span> <span class="nav-text">发散思考</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#前言"><span class="nav-number">1.</span> <span class="nav-text"> 前言</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#概述"><span class="nav-number">2.</span> <span class="nav-text"> 概述</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#方案1-外部定时刷新"><span class="nav-number">2.1.</span> <span class="nav-text"> 方案1-外部定时刷新</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#方案2-访问自动刷新"><span class="nav-number">2.2.</span> <span class="nav-text"> 方案2-访问自动刷新</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#demo准备工作"><span class="nav-number">3.</span> <span class="nav-text"> demo准备工作</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#userservice-用户服务接口"><span class="nav-number">3.1.</span> <span class="nav-text"> UserService-用户服务接口</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#abstractuserservice-用户服务抽象类"><span class="nav-number">3.2.</span> <span class="nav-text"> AbstractUserService-用户服务抽象类</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#testdirect-测试方法"><span class="nav-number">3.3.</span> <span class="nav-text"> testDirect - 测试方法</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#无缓存"><span class="nav-number">4.</span> <span class="nav-text"> 无缓存</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#原始缓存"><span class="nav-number">5.</span> <span class="nav-text"> 原始缓存</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#spring缓存"><span class="nav-number">6.</span> <span class="nav-text"> spring缓存</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#原理浅析"><span class="nav-number">7.</span> <span class="nav-text"> 原理浅析</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#逐步扩展"><span class="nav-number">8.</span> <span class="nav-text"> 逐步扩展</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#支持过期时间"><span class="nav-number">8.1.</span> <span class="nav-text"> 支持过期时间</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#精细控制过期时间"><span class="nav-number">8.2.</span> <span class="nav-text"> 精细控制过期时间</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#过期处理"><span class="nav-number">8.3.</span> <span class="nav-text"> 过期处理</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#发散思考"><span class="nav-number">9.</span> <span class="nav-text"> 发散思考</span></a></li></ol></div>
             
 
           </div>
@@ -696,7 +734,7 @@
 
 
 
-  <div class="theme-info">主题 – <a href="https://theme-next.org" class="theme-link" rel="noopener" target="_blank">NexT.Muse</a> v7.1.2</div>
+  <div class="theme-info">主题 – <a href="https://theme-next.org" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a> v7.1.2</div>
 
 
 
@@ -784,7 +822,10 @@
   
 
 
-  <script src="/js/schemes/muse.js?v=7.1.2"></script>
+  <script src="/js/affix.js?v=7.1.2"></script>
+
+  <script src="/js/schemes/pisces.js?v=7.1.2"></script>
+
 
 
 

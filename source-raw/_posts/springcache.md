@@ -8,12 +8,14 @@ tags:
 
 ---
 
+@[toc]
+
 # 前言
 读完本文，你会知道：
 
 1. 缓存的基本概念
 2. 如何使用spring的缓存
-3. 如何改进spring的缓存
+3. 如何扩展spring的缓存
 
 # 概述
 传统模式下，很多并发不大的系统都是直接将查询请求发到DB：
@@ -119,34 +121,18 @@ result: I0001 -> Name_I0001
 ```
 
 # 原始缓存
-程序员的第一想法肯定是不用搞那么多杂七杂八的，我自己动手用Map实现一个缓存：
-
-```java
-public class SimpleCacheManager<K, V> {
-    private Map<K, V> cache = new ConcurrentHashMap<>();
-    
-    public V get(K key) {
-        return cache.get(key);
-    }
-    
-    public void put(K key, V value) {
-        cache.put(key, value);
-    }
-}
-```
-
-修改下业务代码：
+程序员的第一想法肯定是不用搞那么多杂七杂八的，自己动手用Map实现一个缓存：
 
 ```java
 @Component
 public class SimpleCacheUserService extends AbstractUserService {
-    private SimpleCacheManager<String, String> cacheMgr = new SimpleCacheManager<>();
+    private Map<String, String> cacheMap = new ConcurrentHashMap<>();
     
     public String getNameFromId(String userId) {
-        String name = cacheMgr.get(userId);
+        String name = cacheMap.get(userId);
         if (name == null) {
             name = getNameFromDb(userId);
-            cacheMgr.put(id, name);
+            cacheMap.put(userId, name);
         }
         return name;
     }
@@ -167,12 +153,12 @@ result: I0001 -> Name_I0001
 1. 侵入性高。业务代码与缓存逻辑耦合在一起，不利于后续维护。
 2. 不能灵活扩展，比如某类热点用户id才缓存，其他不缓存。
 3. 绑死ConcurrentHashMap，无法随意切换其他更优秀的缓存实现，比如ehcache/redis等。
-4. 缺乏自动刷新、过期淘汰等各种特征。
+4. 缺乏自动刷新、过期淘汰等现代缓存特征。
 
 那么，spring是怎么做的呢？
 
 # spring缓存
-相比之前侵入式的方案，spring采用的是声明式缓存，缓存逻辑完全脱离业务代码。开发要做的只是在方法上面增加一个注解`@Cacheable`
+相比之前侵入式的方案，spring采用的是声明式缓存，缓存逻辑完全脱离业务代码。我们要做的只是在方法上面增加一个注解`@Cacheable`
 
 ```java
 @Component
@@ -196,7 +182,7 @@ public class TestCacheApp {
 
 再次运行就可以观察到缓存生效了
 
-如果要实现K开头的用户id才缓存，怎么实现呢？很简单，修改下注解，使用`SPEL`声明条件即可：
+如果要实现K开头的用户id才缓存，怎么做呢？很简单，修改下注解，使用`SPEL`声明条件即可：
 
 ```java
 @Cacheable(cacheNames="SpringCache", condition="#userId.startsWith('K')")
@@ -211,9 +197,100 @@ spring通过AOP，在调用者和目标类中间插入代理类，拦截方法�
 
 ![AOP-1](springcache/springcache-aop-2.png)
 
-在此模式下，应用层都是统一一个注解接口，而后端的缓存实现就可以灵活扩展，还能自由`切换、组合`各种优秀的缓存方案（比如ehcache/guava/caffeine/redis）。
+这个设计下，应用层统一使用`@Cacheable`，而后端的缓存实现就可以灵活扩展，还能`自由切换、组合`各种优秀的缓存方案，比如ehcache/guava/caffeine/redis。
 
+# 逐步扩展
+## 支持过期时间
+spring默认使用`ConcurrentHashMap`实现缓存，因此是不支持过期时间的，我们将其换成`Caffeine`。
 
-# 逐步改进
+添加依赖：
+
+````groovy
+    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.boot:spring-boot-starter-cache'
+```
+
+添加配置，设置缓存1秒过期：
+
+```yml
+spring.cache.caffeine.spec: expireAfterWrite=1s
+```
+
+添加测试方法，中间插入一个sleep休眠1.2秒：
+
+```java
+    private void testExpire(UserService userSvc, String userId) {
+        String name;
+        // 1
+        name = userSvc.getNameFromId(userId);
+        log.info("result: {} -> {}", userId, name);
+        // 2
+        name = userSvc.getNameFromId(userId);
+        log.info("result: {} -> {}", userId, name);
+        // sleep
+        try {
+            Thread.sleep(1200);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        // 3
+        name = userSvc.getNameFromId(userId);
+        log.info("result: {} -> {}", userId, name);
+        // 4
+        name = userSvc.getNameFromId(userId);
+        log.info("result: {} -> {}", userId, name);
+    }
+```
+
+运行可以观察到sleep之后，缓存过期失效，重新查询DB：
+
+```
+db query: I0001            
+result: I0001 -> Name_I0001
+result: I0001 -> Name_I0001
+db query: I0001            
+result: I0001 -> Name_I0001
+result: I0001 -> Name_I0001
+```
+
+这个方案下缓存过期时间是全局性的，没法针对特定类型的缓存单独配置，如何改进呢？
+
+## 精细控制过期时间
+我们可以从`@Cacheable(cacheNames="SpringCache")`着手，在缓存名称后面追加过期时间，变成`@Cacheable(cacheNames="SpringCache,1")`
+
+新增一个`CacheManager`，重写父类方法`createCaffeineCache`，在里面处理缓存名称：
+
+```java
+@Component
+public class ExtCacheManager extends CaffeineCacheManager {
+    @Override
+    protected Cache createCaffeineCache(String name) {
+        // 解析缓存名称
+        String[] items = name.split(",");
+        String cacheName = items[0];
+        long cacheTime = Long.parseLong(items[1]);
+        // 创建缓存
+        com.github.benmanes.caffeine.cache.Cache<Object, Object> nativeCache = 
+                Caffeine.newBuilder()
+                .expireAfterWrite(cacheTime, TimeUnit.SECONDS)
+                .build();
+        return new CaffeineCache(cacheName, nativeCache);
+    }
+}
+```
+
+## 过期处理
+当缓存过期后，如果不加以处理，就会导致多个并发请求瞬间穿透到DB：
+
+![缓存过期-穿透-1](springcache/springcache-expire-1.png)
+
+一个解决方案是判断到过期的时候加锁，抢占成功的就去DB刷新缓存，其他请求则使用旧值：
+
+![缓存过期-穿透-2](springcache/springcache-expire-2.png)
+
+但是要考虑如果一直没请求进来，在缓存过期很久之后再出现这个场景，此时取到的旧值已经过期很久了：
+
+![缓存过期-穿透-2](springcache/springcache-expire-3.png)
+
 
 # 发散思考
