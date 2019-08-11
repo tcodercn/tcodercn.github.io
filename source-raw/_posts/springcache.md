@@ -8,14 +8,15 @@ tags:
 
 ---
 
-@[toc]
-
-# 前言
 读完本文，你会知道：
 
 1. 缓存的基本概念
 2. 如何使用spring的缓存
 3. 如何扩展spring的缓存
+
+
+目录
+@[toc]
 
 # 概述
 传统模式下，很多并发不大的系统都是直接将查询请求发到DB：
@@ -28,7 +29,7 @@ tags:
 
 ## 方案1-外部定时刷新
 
-![外部定时刷新-1](springcache/springcache-side-refresh-1.png)
+![外部定时刷新-1](springcache/springcache-refresh-side-1.png)
 
 1. 缓存刷新程序读取DB，然后写入缓存；
 2. 联机交易直接读取缓存，不再访问数据库；
@@ -42,7 +43,7 @@ tags:
 
 ## 方案2-访问自动刷新
 
-![访问自动刷新-1](springcache/springcache-access-refresh-1.png)
+![访问自动刷新-1](springcache/springcache-refresh-access-1.png)
 
 1. 联机交易访问缓存，如果有值且未过期，直接返回调用者；
 2. 访问数据库获取最新值；
@@ -50,9 +51,9 @@ tags:
 
 这个方案解决了`方案1`的各种问题，但是还是有许多细节需要处理的。
 
-接下来我们做个demo，看看如何实现一个基本可用的缓存方案，并逐一解决各种问题。
+# demo准备
 
-# demo准备工作
+接下来我们做个demo，原始需求是通过用户id查询用户name。通过这个demo，看看应该如何逐步实现并改进缓存方案。
 
 ## UserService-用户服务接口
 接口只有一个方法`getNameFromId`，入参为用户id，返回值为用户名：
@@ -72,7 +73,14 @@ public abstract class AbstractUserService implements UserService {
     
     protected String getNameFromDb(String userId) {
         log.info("db query: {}", userId);
-        return "Name_" + id;
+        // 暂停
+        try {
+            Thread.sleep(100);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        // 返回
+        return "Name_" + userId;
     }
 }
 ```
@@ -188,7 +196,8 @@ public class TestCacheApp {
 @Cacheable(cacheNames="SpringCache", condition="#userId.startsWith('K')")
 ```
 
-# 原理浅析
+我们简单分析下原理。
+
 原始调用链：
 
 ![原始调用链-1](springcache/springcache-aop-1.png)
@@ -197,7 +206,7 @@ spring通过AOP，在调用者和目标类中间插入代理类，拦截方法�
 
 ![AOP-1](springcache/springcache-aop-2.png)
 
-这个设计下，应用层统一使用`@Cacheable`，而后端的缓存实现就可以灵活扩展，还能`自由切换、组合`各种优秀的缓存方案，比如ehcache/guava/caffeine/redis。
+在这个设计下，应用层统一使用`@Cacheable`，而后端的缓存实现就可以灵活扩展，还能`自由切换、组合`各种优秀的缓存方案，比如ehcache/guava/caffeine/redis。
 
 # 逐步扩展
 ## 支持过期时间
@@ -210,13 +219,13 @@ spring默认使用`ConcurrentHashMap`实现缓存，因此是不支持过期时�
     implementation 'org.springframework.boot:spring-boot-starter-cache'
 ```
 
-添加配置，设置缓存1秒过期：
+添加配置，设置缓存2秒过期：
 
 ```yml
-spring.cache.caffeine.spec: expireAfterWrite=1s
+spring.cache.caffeine.spec: expireAfterWrite=2s
 ```
 
-添加测试方法，中间插入一个sleep休眠1.2秒：
+添加测试方法，中间插入一个sleep休眠2.2秒：
 
 ```java
     private void testExpire(UserService userSvc, String userId) {
@@ -229,7 +238,7 @@ spring.cache.caffeine.spec: expireAfterWrite=1s
         log.info("result: {} -> {}", userId, name);
         // sleep
         try {
-            Thread.sleep(1200);
+            Thread.sleep(2200);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
@@ -242,7 +251,7 @@ spring.cache.caffeine.spec: expireAfterWrite=1s
     }
 ```
 
-运行可以观察到sleep之后，缓存过期失效，重新查询DB：
+执行结果可以观察到sleep之后，缓存过期失效，重新查询DB：
 
 ```
 db query: I0001            
@@ -253,10 +262,10 @@ result: I0001 -> Name_I0001
 result: I0001 -> Name_I0001
 ```
 
-这个方案下缓存过期时间是全局性的，没法针对特定类型的缓存单独配置，如何改进呢？
+这个方案下缓存过期时间是全局性的，不支持不同类型的缓存单独配置不同的缓存过期时间。比如普通参数表可以1小时后过期，但是关键参数表却必须控制在1分钟内过期，如何实现呢？
 
 ## 精细控制过期时间
-我们可以从`@Cacheable(cacheNames="SpringCache")`着手，在缓存名称后面追加过期时间，变成`@Cacheable(cacheNames="SpringCache,1")`
+我们可以从`@Cacheable(cacheNames="SpringCache")`着手，在缓存名称后面追加过期时间，变成`@Cacheable(cacheNames="SpringCache,2")`
 
 新增一个`CacheManager`，重写父类方法`createCaffeineCache`，在里面处理缓存名称：
 
@@ -268,7 +277,10 @@ public class ExtCacheManager extends CaffeineCacheManager {
         // 解析缓存名称
         String[] items = name.split(",");
         String cacheName = items[0];
-        long cacheTime = Long.parseLong(items[1]);
+        long cacheTime = 60;
+        if (items.length >= 2) {
+            cacheTime = Long.parseLong(items[1]);
+        }
         // 创建缓存
         com.github.benmanes.caffeine.cache.Cache<Object, Object> nativeCache = 
                 Caffeine.newBuilder()
@@ -279,18 +291,262 @@ public class ExtCacheManager extends CaffeineCacheManager {
 }
 ```
 
-## 过期处理
-当缓存过期后，如果不加以处理，就会导致多个并发请求瞬间穿透到DB：
+执行结果可以观察到此时缓存过期时间可以精细控制了。
 
-![缓存过期-穿透-1](springcache/springcache-expire-1.png)
+## 过期处理策略
+到了这里，我们需要暂时停下来，讨论下缓存过期的处理策略。
 
-一个解决方案是判断到过期的时候加锁，抢占成功的就去DB刷新缓存，其他请求则使用旧值：
+当缓存过期后，如果不加以处理，直接在当前请求更新缓存，就会导致多个并发请求瞬间穿透到DB：
 
-![缓存过期-穿透-2](springcache/springcache-expire-2.png)
+![缓存过期-穿透-1](springcache/springcache-expire-through-1.png)
 
-但是要考虑如果一直没请求进来，在缓存过期很久之后再出现这个场景，此时取到的旧值已经过期很久了：
+一种做法是判断到过期的时候加锁，抢占成功的就去DB刷新缓存，其他请求则等待：
 
-![缓存过期-穿透-2](springcache/springcache-expire-3.png)
+![缓存过期-等待-1](springcache/springcache-expire-wait-1.png)
 
+从上图可以看到，这样会造成请求瞬间卡顿。
+
+我们改进下，未争抢到锁的请求不等待，而是直接使用旧值：
+
+![缓存过期-旧值-1](springcache/springcache-expire-oldvalue-1.png)
+
+乍看之下没问题，但是仔细想想，如果一直没请求进来，在缓存过期很久之后再出现这个场景，此时取到的旧值已经严重过期，再直接使用可能会引发问题：
+
+![缓存过期-旧值-2](springcache/springcache-expire-oldvalue-2.png)
+
+先总结下前面的需求，我们要`尽可能做到`：
+
+1. 不并行更新缓存，否则会冲击到DB；
+2. 不产生锁等待，否则会导致瞬间卡顿；
+3. 不使用过期缓存值，否则会影响到业务处理；
+
+这几点按重要性排序应该是`3 > 1 > 2`，综合几个策略，我们可以：
+
+1. 缓存`即将`过期，1个请求负责刷新缓存，其他请求则`使用缓存值`；
+2. 缓存`已经`过期，1个请求负责刷新缓存，其他请求则`锁等待`；
+
+![缓存过期-提前-1](springcache/springcache-expire-ahead-1.png)
+
+![缓存过期-提前-1](springcache/springcache-expire-ahead-2.png)
+
+此时的缓存有效时间会不断的向前滚动，只需要1个请求负责更新缓存，其他请求直接使用缓存值：
+
+![缓存过期-提前-1](springcache/springcache-expire-ahead-3.png)
+
+## 实现提前刷新
+
+当caffeine判断到需要刷新的时候（预设的`刷新时间`或`过期时间`到达），就会主动调用我们实现的CacheLoader：
+
+```java
+public interface CacheLoader<K, V> {
+    V load (K key) throws Exception;
+}
+```
+
+但是这个接口方法只有一个`key`参数，我们怎么实现刷新呢？
+
+![AOP-1](springcache/springcache-aop-2.png)
+
+从前面的这个图可以看到，缓存模块并不知道值来源于DB还是哪里，刷新的唯一途径就是调用目标方法。但是目标方法上面只有一个`@Cacheable`注解而已，我们怎么获取到相关信息呢？
+
+spring给我们提供的方案是注解上面的`keyGenerator`参数，每次缓存操作的时候，spring都会调用其这个接口获取到key：
+
+```java
+@FunctionalInterface
+public interface KeyGenerator {
+	Object generate(Object target, Method method, Object... params);
+}
+```
+
+我们可以在这上面做文章，使用自定义key，将目标方法保存起来，然后提供一个invoke方法给CacheLoader调用。另外，我们还需要实现`equals/hashCode/toString`等key比较时要用到的基础方法。
+
+```java
+public class ExtKey {
+    private final Object target;
+    private final Method method;
+    private final Object[] params;
+    private final int hashCode;
+    
+    public ExtKey(Object target, Method method, Object... params) {
+        this.target = target;
+        this.method = method;
+        // 复制参数
+        this.params = new Object[params.length];
+        System.arraycopy(params, 0, this.params, 0, params.length);
+        // 计算hash
+        this.hashCode = Arrays.deepHashCode(this.params);
+    }
+    
+    public Object invoke() throws Exception {
+        return this.method.invoke(target, params);
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return (this == other ||
+                (other instanceof ExtKey && Arrays.deepEquals(this.params, ((ExtKey) other).params)));
+    }
+
+    @Override
+    public final int hashCode() {
+        return this.hashCode;
+    }
+
+    @Override
+    public String toString() {
+        return getClass().getSimpleName() + " [" + StringUtils.arrayToCommaDelimitedString(this.params) + "]";
+    }
+}
+```
+
+KeyGenerator直接返回ExtKey即可：
+
+```java
+@Component("ExtKeyGenerator")
+public class ExtKeyGenerator implements KeyGenerator {
+    @Override
+    public Object generate(Object target, Method method, Object... params) {
+        return new ExtKey(target, method, params);
+    }
+}
+```
+
+在注解里面添加刷新时间（-0.5即提前0.5秒刷新）及KeyGenerator信息：
+
+```java
+    @Cacheable(cacheNames="SpringCache,1,-0.5", 
+        keyGenerator="ExtKeyGenerator")
+```
+
+然后在缓存初始化里面添加CacheLoader：
+
+```java
+@Component
+public class ExtCacheManager extends CaffeineCacheManager {
+    //
+    private Logger log = LoggerFactory.getLogger(TestCacheApp.class);
+    
+    @Override
+    protected Cache createCaffeineCache(String name) {
+        // 解析缓存名称
+        String[] items = name.split(",");
+        String cacheName = items[0];
+        long cacheTime = 60;
+        long refreshTime = 0;
+        // 缓存过期时间
+        if (items.length >= 2) {
+            cacheTime = (long) (1000 * Float.parseFloat(items[1]));
+        }
+        // 缓存刷新时间 = 缓存过期时间 + 时间差（负数）
+        if (items.length >= 3) {
+            refreshTime = cacheTime + (long) (1000 * Float.parseFloat(items[2]));
+        }
+        // 缓存加载器
+        CacheLoader<Object, Object> loader = new CacheLoader<Object, Object>() {
+            @Override
+            public @Nullable Object load(@NonNull Object key) throws Exception {
+                log.info("refresh cache: {}", key);
+                ExtKey extKey = (ExtKey) key;
+                return extKey.invoke();
+            }
+        };
+        // 创建缓存
+        Caffeine<Object, Object> builder = Caffeine.newBuilder()
+                .expireAfterWrite(cacheTime, TimeUnit.MILLISECONDS);
+        if (refreshTime > 0) {
+            // 提前刷新
+            builder.refreshAfterWrite(refreshTime, TimeUnit.MILLISECONDS)
+                   .executor(Runnable::run);
+        }
+        return new CaffeineCache(cacheName, builder.build(loader));
+    }
+}
+```
+
+对于一些系统，如果加载方法不能在公共线程池`ForkJoinPool.commonPool()`执行，必须在当前请求线程执行，则需要显式指定 `executor(Runnable::run)`。
+
+接下来测试下效果，首先新建线程类：
+
+```java
+    private static class VirtualUser extends Thread {
+        // 入参
+        private final UserService userSvc;
+        private final String userId;
+        private final CountDownLatch latch;
+        
+        // 停止标志
+        public volatile boolean stopFlag = false;
+        // 计数
+        public int counter = 0;
+        
+        public VirtualUser(UserService userSvc, String userId, CountDownLatch latch) {
+            this.userSvc = userSvc;
+            this.userId = userId;
+            this.latch = latch;
+        }
+        
+        @Override
+        public void run() {
+            try {
+                // 等待
+                latch.await();
+                // 循环执行
+                while (true) {
+                    // 测试
+                    String name = userSvc.getNameFromId(userId);
+                    // 累加
+                    counter++;
+                    // 暂停
+                    Thread.sleep(0);
+                    // 是否停止
+                    if (stopFlag) {
+                        break;
+                    }
+                }
+            }
+            catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+```
+
+然后新建一个多线程测试方法：
+
+```java
+    private void testMultiThread(UserService userSvc, String userId) throws Exception {
+        // 虚拟用户数
+        final int VUSER_COUNT = 200;
+
+        log.info("create thread ...");
+        CountDownLatch latch = new CountDownLatch(1);
+        List<VirtualUser> threadList = new ArrayList<>();
+        for (int i = 0; i < VUSER_COUNT; i++) {
+            VirtualUser thread = new VirtualUser(userSvc, userId, latch);
+            thread.start();
+            threadList.add(thread);
+        }
+        
+        log.info("go ...");
+        latch.countDown();
+
+        Thread.sleep(10 * 1000);
+
+        log.info("stop thread ...");
+        for (VirtualUser thread : threadList) {
+            thread.stopFlag = true;
+        }
+        
+        int totalCount = 0;
+        for (VirtualUser thread : threadList) {
+            thread.join();
+            totalCount += thread.counter;
+        }
+        
+        log.info("all done, counter: {}", totalCount);
+    }
+```
+
+通过对比参数`cacheNames="SpringCache,1,-0.5"`和`cacheNames="SpringCache,1"`对应的执行效果，可以观察到`提前刷新`是比`过期刷新`效率高的，而随着`并发数`和`刷新耗时`的上升，两者的差距会越来越明显。
 
 # 发散思考
