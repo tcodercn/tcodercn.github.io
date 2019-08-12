@@ -1,5 +1,5 @@
 ---
-title: spring cache
+title: spring cache abstraction
 date: 2019-08-06 15:46:52
 tags:
   - spring
@@ -11,8 +11,9 @@ tags:
 读完本文，你会知道：
 
 1. 缓存的基本概念
-2. 如何使用spring的缓存
-3. 如何扩展spring的缓存
+2. spring缓存抽象模型
+3. 如何使用spring缓存
+4. 如何扩展spring缓存
 
 
 目录
@@ -27,6 +28,8 @@ tags:
 
 为了应对这个问题，我们需要将常用的数据缓存起来，避免`业务量*N`的查询请求穿透到DB。
 
+根据刷新方式的不同，大体有两种方案。
+
 ## 方案1-外部定时刷新
 
 ![外部定时刷新-1](springcache/springcache-refresh-side-1.png)
@@ -39,7 +42,7 @@ tags:
 1. 需要特定缓存程序定期刷新。如果这个刷新动作出现问题，会产生大面积的参数变更不生效。
 2. 缓存数据格式死板。为了通用，格式必须跟DB表保持一致，应用层获取到之后还需要自行加工处理。
 3. 刷新频率无法精细控制。比如一些数据一天刷新一次即可，一些数据需要10秒刷新一次。
-4. 无法区分冷热数据，空间利用率差。比如一张表10000条数据，常被访问的也就100条，另外9900条数据可能一年都不会用到一次，还是一样被加载到缓存里面。
+4. 无法区分冷热数据，空间利用率差。比如一张表10000条数据，常被访问的也就100条，另外9900条数据可能一年都不会用到一次，还是一样被加载到缓存里面，冷数据不能根据LRU淘汰。
 
 ## 方案2-访问自动刷新
 
@@ -49,11 +52,13 @@ tags:
 2. 访问数据库获取最新值；
 3. 写入缓存，返回调用者；
 
-这个方案解决了`方案1`的各种问题，但是还是有许多细节需要处理的。
+因为`方案1`的种种问题，所以现在主流都是采样`方案2`。
 
 # demo准备
 
-接下来我们做个demo，原始需求是通过用户id查询用户name。通过这个demo，看看应该如何逐步实现并改进缓存方案。
+接下来我们做个demo，看看应该如何逐步实现并改进缓存方案。
+
+需求：通过用户id查询用户name
 
 ## UserService-用户服务接口
 接口只有一个方法`getNameFromId`，入参为用户id，返回值为用户名：
@@ -117,7 +122,7 @@ public class NoCacheUserService extends AbstractUserService {
 }
 ```
 
-执行结果可以观察到每次调用都是访问DB：
+执行后从输出可以观察到每次调用都是访问DB：
 
 ```
 db query: I0001            
@@ -147,7 +152,7 @@ public class SimpleCacheUserService extends AbstractUserService {
 }
 ```
 
-执行结果可以观察到只有第一次调用访问DB，后面都是直接从缓存获取
+执行后从输出可以观察到只有第一次调用访问DB，后面都是直接从缓存获取
 
 ```
 db query: I0001            
@@ -215,11 +220,11 @@ spring默认使用`ConcurrentHashMap`实现缓存，因此是不支持过期时�
 添加依赖：
 
 ````groovy
-    implementation 'org.springframework.boot:spring-boot-starter'
     implementation 'org.springframework.boot:spring-boot-starter-cache'
+    implementation 'com.github.ben-manes.caffeine:caffeine:2.7.0'
 ```
 
-添加配置，设置缓存2秒过期：
+在application.yml添加配置，设置缓存2秒过期：
 
 ```yml
 spring.cache.caffeine.spec: expireAfterWrite=2s
@@ -265,7 +270,11 @@ result: I0001 -> Name_I0001
 这个方案下缓存过期时间是全局性的，不支持不同类型的缓存单独配置不同的缓存过期时间。比如普通参数表可以1小时后过期，但是关键参数表却必须控制在1分钟内过期，如何实现呢？
 
 ## 精细控制过期时间
-我们可以从`@Cacheable(cacheNames="SpringCache")`着手，在缓存名称后面追加过期时间，变成`@Cacheable(cacheNames="SpringCache,2")`
+我们可以从注解着手，在缓存名称后面追加过期时间，变成：
+
+```java
+@Cacheable(cacheNames="SpringCache,2")
+```
 
 新增一个`CacheManager`，重写父类方法`createCaffeineCache`，在里面处理缓存名称：
 
@@ -291,7 +300,7 @@ public class ExtCacheManager extends CaffeineCacheManager {
 }
 ```
 
-执行结果可以观察到此时缓存过期时间可以精细控制了。
+执行后从输出可以观察到此时缓存过期时间可以精细控制了。
 
 ## 过期处理策略
 到了这里，我们需要暂时停下来，讨论下缓存过期的处理策略。
@@ -349,7 +358,7 @@ public interface CacheLoader<K, V> {
 
 从前面的这个图可以看到，缓存模块并不知道值来源于DB还是哪里，刷新的唯一途径就是调用目标方法。但是目标方法上面只有一个`@Cacheable`注解而已，我们怎么获取到相关信息呢？
 
-spring给我们提供的方案是注解上面的`keyGenerator`参数，每次缓存操作的时候，spring都会调用其这个接口获取到key：
+spring给我们提供的方案是注解上面的`keyGenerator`参数，每次缓存操作的时候，spring都会调用这个接口获取到key：
 
 ```java
 @FunctionalInterface
@@ -463,7 +472,7 @@ public class ExtCacheManager extends CaffeineCacheManager {
 }
 ```
 
-对于一些系统，如果加载方法不能在公共线程池`ForkJoinPool.commonPool()`执行，必须在当前请求线程执行，则需要显式指定 `executor(Runnable::run)`。
+对于一些系统，如果加载方法不能运行在公共线程池`ForkJoinPool.commonPool()`，而必须在缓存请求线程执行，则需要显式指定 `executor(Runnable::run)`。
 
 接下来测试下效果，首先新建线程类：
 
@@ -547,6 +556,199 @@ public class ExtCacheManager extends CaffeineCacheManager {
     }
 ```
 
-通过对比参数`cacheNames="SpringCache,1,-0.5"`和`cacheNames="SpringCache,1"`对应的执行效果，可以观察到`提前刷新`是比`过期刷新`效率高的，而随着`并发数`和`刷新耗时`的上升，两者的差距会越来越明显。
+通过比较参数`cacheNames="SpringCache,1,-0.5"`和`cacheNames="SpringCache,1"`对应的执行效果，可以观察到`提前刷新`是比`过期刷新`效率高的，并且随着`并发数`和`刷新耗时`的上升，两者的差距会越来越明显。
+
+## 集中配置
+
+缓存名称、大小、过期时间、刷新时间等参数目前都是直接放在注解上面，不利于管理维护，我们可以将其集中起来。
+
+在application.yml添加配置，key为类名，value为`容量,过期时间,刷新时间`：
+
+```yml
+ext.cache:
+  cacheItemMap:
+    SpringCacheUserService:   100,1,-0.5
+```
+
+配置对应的bean：
+
+```java
+@Component
+@ConfigurationProperties("ext.cache")
+public class CacheConfig {
+    private Map<String, String> cacheItemMap;
+
+    public void setCacheItemMap(Map<String, String> cacheItemMap) {
+        this.cacheItemMap = cacheItemMap;
+    }
+    
+    public CacheItem getCacheItem(String cacheName) {
+        // 配置值
+        String cfgStr = cacheItemMap.get(cacheName);
+        String[] items = cfgStr.split(",");
+        long maxSize = Long.parseLong(items[0]);
+        long cacheTime = 1000 * (long) Float.parseFloat(items[1]);
+        long refreshTime = 1000 * (long) Float.parseFloat(items[2]);
+        // 计算刷新时间：-1 + 5 = 4
+        if (refreshTime != 0) {
+            refreshTime += cacheTime;
+        }
+        // 返回
+        return new CacheItem(maxSize, cacheTime, refreshTime);
+    }
+}
+```
+
+```java
+public class CacheItem {
+    private final long maxSize;
+    private final long cacheTime;
+    private final long refreshTime;
+    
+    public CacheItem(long maxSize, long cacheTime, long refreshTime) {
+        this.maxSize = maxSize;
+        this.cacheTime = cacheTime;
+        this.refreshTime = refreshTime;
+    }
+    
+    public long getMaxSize() {
+        return maxSize;
+    }
+    
+    public long getCacheTime() {
+        return cacheTime;
+    }
+    
+    public long getRefreshTime() {
+        return refreshTime;
+    }
+}
+```
+
+修改下`CacheManager`读取配置：
+
+```java
+@Component
+public class ExtCacheManager extends CaffeineCacheManager {
+    //
+    private Logger log = LoggerFactory.getLogger(TestCacheApp.class);
+
+    @Autowired
+    private CacheConfig cacheConfig;
+    
+    @Override
+    protected Cache createCaffeineCache(String name) {
+        // 获取配置
+        CacheItem cacheItem = cacheConfig.getCacheItem(name);
+        long maxSize = cacheItem.getMaxSize();
+        long cacheTime = cacheItem.getCacheTime();
+        long refreshTime = cacheItem.getRefreshTime();
+        // 缓存加载器
+        CacheLoader<Object, Object> loader = new CacheLoader<Object, Object>() {
+            @Override
+            public @Nullable Object load(@NonNull Object key) throws Exception {
+                log.info("refresh cache: {}", key);
+                ExtKey extKey = (ExtKey) key;
+                return extKey.invoke();
+            }
+        };
+        // 创建缓存
+        Caffeine<Object, Object> builder = Caffeine.newBuilder()
+                .expireAfterWrite(cacheTime, TimeUnit.MILLISECONDS);
+        if (maxSize > 0) {
+            builder.maximumSize(maxSize);
+        }
+        if (refreshTime > 0) {
+            // 提前刷新
+            builder.refreshAfterWrite(refreshTime, TimeUnit.MILLISECONDS)
+                   .executor(Runnable::run);
+        }
+        return new CaffeineCache(name, builder.build(loader));
+    }
+}
+```
+
+原来的缓存名称都是直接写在注解上面的，如果要动态生成，需要拓展`CacheResolver`：
+
+```java
+@FunctionalInterface
+public interface CacheResolver {
+	Collection<? extends Cache> resolveCaches(CacheOperationInvocationContext<?> context);
+}
+```
+
+我们只需要实现`AbstractCacheResolver`的`getCacheNames`即可：
+
+```java
+@Component("ExtCacheResolver")
+public class ExtCacheResolver extends AbstractCacheResolver {
+    public ExtCacheResolver(CacheManager cacheManager) {
+        super(cacheManager);
+    }
+    
+    @Override
+    protected Collection<String> getCacheNames(CacheOperationInvocationContext<?> context) {
+        // 使用类名作为缓存名称
+        String cacheName = context.getTarget().getClass().getSimpleName();
+        return Arrays.asList(cacheName);
+    }
+}
+```
+
+在注解里面引用`CacheResolver`：
+
+```java
+@Cacheable(keyGenerator="ExtKeyGenerator",
+        cacheResolver="ExtCacheResolver")
+```
+
+每个使用缓存的地方都要这样注解，对用户太不友好了。我们可以利用spring的注解组合功能：
+
+```java
+@Target({
+    ElementType.METHOD,
+})
+@Retention(RetentionPolicy.RUNTIME)
+@Inherited
+@Documented
+@Cacheable(keyGenerator="ExtKeyGenerator",
+        cacheResolver="ExtCacheResolver")
+public @interface ExtCacheable {
+
+}
+```
+
+直接引用这个注解：
+
+```java
+    @ExtCacheable
+    public String getNameFromId(String userId) {
+        return getNameFromDb(userId);
+    }
+```
+
+相比原来冗长的注解，简洁不少：
+```java
+@Cacheable(cacheNames="SpringCache,1,-0.5", keyGenerator="ExtKeyGenerator")
+->
+@ExtCacheable
+```
+
+## 模块关系
+
+看到这里，头脑是不是有点蒙圈了？
+
+我们整理一下各个模块之间的关系：
+
+![关系-1](springcache/springcache-aop-3.png)
 
 # 发散思考
+
+全程下来，很深的感受是AOP不愧为spring的两大特征之一（另外一个是DI），而SCS作为协调者，做到了caller/target/cache三者之间的平滑处理。
+
+那么，我们还可以用SCS做什么？
+
+1. 切换本地缓存caffeine为远程缓存redis；
+2. 组合caffeine和redis，少量、时效性不高的参数放在caffeine（分布式、速度快），大量、时效性高的数据放在redis（节省内存、更新方便）；
+
+demo下载链接：[ [testcache.7z](/source-raw/_posts/springcache/testcache.7z)]
